@@ -20,7 +20,7 @@
 -include_lib("escalus/include/escalus.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
-
+-define(ne(E, I), ?assert(E =/= I)).
 
 %%--------------------------------------------------------------------
 %% Suite configuration
@@ -30,8 +30,7 @@ all() ->
     [{group, order}].
 
 groups() ->
-    [{order, [], [stream_compression_after_SASL,
-                  stream_compression_before_SASL]}].
+    [{order, [], [stream_compression_without_tls, stream_compression_after_tls]}].
 
 suite() ->
     escalus:suite().
@@ -43,10 +42,10 @@ suite() ->
 
 init_per_suite(Config0) ->
     Config1 = escalus:init_per_suite(Config0),
-    escalus:create_users(Config1, {by_name, [alice]}).
+    escalus:create_users(Config1, {by_name, [secure_joe]}).
 
 end_per_suite(Config0) ->
-    Config1 = escalus:delete_users(Config0, {by_name, [alice]}),
+    Config1 = escalus:delete_users(Config0, {by_name, [secure_joe]}),
     escalus:end_per_suite(Config1).
 
 init_per_group(order, Config) ->
@@ -63,29 +62,23 @@ end_per_testcase(CaseName, Config) ->
 
 
 %%--------------------------------------------------------------------
-%% Time request test
+%% Connection steps test
 %%--------------------------------------------------------------------
+stream_compression_without_tls(Config) ->
+    Joe = escalus_users:get_options(Config, secure_joe),
+    {ok, Conn, _, _} = escalus_connection:start(Joe, [start_stream,
+                                                      stream_features,
+                                                      maybe_use_compression,
+                                                      authenticate, bind, session]),
+    SSL = Conn#client.compress,
+    ?ne(SSL, false).
 
-stream_compression_before_SASL(Config) ->
-    Alice = escalus_users:get_options(Config, alice),
-    {ok, _, _, _} = escalus_connection:start(Alice, [start_stream,
-                                                     stream_features,
-
-                                                     maybe_use_compression,
-
-                                                     maybe_use_ssl,
-                                                     authenticate,
-                                                     bind,
-                                                     session]).
-
-stream_compression_after_SASL(Config) ->
-    Alice = escalus_users:get_options(Config, alice),
-    {ok, _, _, _} = escalus_connection:start(Alice, [start_stream,
-                                                     stream_features,
-                                                     maybe_use_ssl,
-                                                     authenticate,
-
-                                                     maybe_use_compression,
-
-                                                     bind,
-                                                     session]).
+stream_compression_after_tls(Config) ->
+    Joe = escalus_users:get_options(Config, secure_joe),
+    {ok, Conn, _, _} = escalus_connection:start(Joe, [start_stream,
+                                                      stream_features,
+                                                      maybe_use_ssl,            %% added this line
+                                                      maybe_use_compression,
+                                                      authenticate, bind, session]),
+    SSL = Conn#client.compress,
+    ?ne(SSL, false).
