@@ -20,6 +20,7 @@
 -include_lib("exml/include/exml.hrl").
 -include_lib("escalus/include/escalus.hrl").
 -include_lib("common_test/include/ct.hrl").
+-include_lib("eunit/include/eunit.hrl").
 -define(NS_BLOCKING,     <<"urn:xmpp:blocking">>).
 
 -define(SLEEP_TIME, 50).
@@ -40,7 +41,13 @@ base_test_cases() ->
     [
         discovering_support,
         get_block_list,
-        add_user_to_blocklist
+        add_user_to_blocklist,
+        add_another_user_to_blocklist,
+        add_many_users_to_blocklist,
+        remove_user_from_blocklist,
+        remove_many_user_from_blocklist,
+        clear_blocklist,
+        invalid_block_request
     ].
 
 suite() ->
@@ -58,10 +65,10 @@ end_per_suite(Config) ->
     escalus:end_per_suite(Config).
 
 init_per_group(_GroupName, Config) ->
-    escalus:create_users(Config, escalus:get_users([alice, bob])).
+    escalus:create_users(Config, escalus:get_users([alice, bob, carol, mike, geralt])).
 
 end_per_group(_GroupName, Config) ->
-    escalus:delete_users(Config, escalus:get_users([alice, bob])).
+    escalus:delete_users(Config, escalus:get_users([alice, bob, carol, mike, geralt])).
 
 init_per_testcase(CaseName, Config) ->
     escalus:init_per_testcase(CaseName, Config).
@@ -102,15 +109,73 @@ add_user_to_blocklist(Config) ->
     escalus:story(
         Config, [{alice, 1}, {bob, 1}],
         fun(User1, User2) ->
-            %% given
             user_blocks(User1, [User2]),
-            %% when
             BlockList = get_blocklist(User1),
-%%            io:format("Received stanza is ~n~p~n",[BlockList]),
-            %% then
             blocklist_contains_jid(BlockList, User2)
         end).
-%%
+
+add_another_user_to_blocklist(Config) ->
+    escalus:story(
+        Config, [{alice, 1}, {mike, 1}],
+        fun(User1, User2) ->
+            user_blocks(User1, [User2]),
+            BlockList = get_blocklist(User1),
+            blocklist_contains_jid(BlockList, User2)
+        end).
+
+add_many_users_to_blocklist(Config) ->
+    escalus:story(
+        Config, [{alice, 1}, {bob, 1}, {carol, 1}, {mike,1}],
+        fun(User1, User2, User3, User4) ->
+            user_blocks(User1, [User2, User3, User4]),
+            BlockList = get_blocklist(User1),
+            blocklist_contains_jid(BlockList, User2),
+            blocklist_contains_jid(BlockList, User3),
+            blocklist_contains_jid(BlockList, User4)
+        end).
+
+remove_user_from_blocklist(Config) ->
+    escalus:story(
+        Config, [{alice, 1}, {bob, 1}],
+        fun(User1, User2) ->
+            user_blocks(User1, [User2]),
+            user_unblocks(User1, User2),
+            NewList = get_blocklist(User1),
+            blocklist_doesnt_contain_jid(NewList, User2)
+        end).
+
+remove_many_user_from_blocklist(Config) ->
+    escalus:story(
+        Config, [{alice, 1}, {bob, 1}, {geralt, 1}],
+        fun(User1, User2, User3) ->
+            user_blocks(User1, [User2, User3]),
+            user_unblocks(User1, [User2, User3]),
+            NewList = get_blocklist(User1),
+            blocklist_doesnt_contain_jid(NewList, User2),
+            blocklist_doesnt_contain_jid(NewList, User3)
+        end).
+
+clear_blocklist(Config) ->
+    escalus:story(
+        Config, [{alice, 1}, {bob, 1}, {geralt, 1}],
+        fun(User1, User2, User3) ->
+            user_blocks(User1, [User2, User3]),
+            user_unblocks_all(User1),
+            NewList = get_blocklist(User1),
+            blocklist_is_empty(NewList)
+        end).
+
+invalid_block_request(Config) ->
+    escalus:story(
+        Config, [{alice, 1}],
+        fun(User1) ->
+            St = block_users_stanza([]),
+            escalus_client:send(User1, St),
+            Stanza = escalus_client:wait_for_stanza(User1),
+            ct:pal("badrequest ~p", [Stanza]),
+            escalus_assert:is_error(Stanza, <<"modify">>, <<"bad-request">>)
+        end).
+
 
 %% common
 %%
@@ -142,14 +207,14 @@ block_users_stanza(UsersToBlock) ->
         children = [Payload]}.
 
 
-block_user_stanza(UserToBlock) ->
-    Payload = #xmlel{name = <<"block">>,
-        attrs=[{<<"xmlns">>, ?NS_BLOCKING}],
-        children = [item_el(UserToBlock)]
-    },
-    #xmlel{name = <<"iq">>,
-        attrs = [{<<"type">>, <<"set">>}],
-        children = Payload}.
+%%block_user_stanza(UserToBlock) ->
+%%    Payload = #xmlel{name = <<"block">>,
+%%        attrs=[{<<"xmlns">>, ?NS_BLOCKING}],
+%%        children = [item_el(UserToBlock)]
+%%    },
+%%    #xmlel{name = <<"iq">>,
+%%        attrs = [{<<"type">>, <<"set">>}],
+%%        children = Payload}.
 
 unblock_user_stanza(UserToUnblock) ->
     Payload = #xmlel{name = <<"unblock">>,
@@ -158,7 +223,7 @@ unblock_user_stanza(UserToUnblock) ->
     },
     #xmlel{name = <<"iq">>,
         attrs = [{<<"type">>, <<"set">>}],
-        children = Payload}.
+        children = [Payload]}.
 
 unblock_users_stanza(UsersToBlock) ->
     Childs = [item_el(U) || U <- UsersToBlock],
@@ -168,7 +233,7 @@ unblock_users_stanza(UsersToBlock) ->
     },
     #xmlel{name = <<"iq">>,
         attrs = [{<<"type">>, <<"set">>}],
-        children = Payload}.
+        children = [Payload]}.
 
 unblock_all_stanza() ->
     Payload = #xmlel{name = <<"unblock">>,
@@ -177,7 +242,7 @@ unblock_all_stanza() ->
     },
     #xmlel{name = <<"iq">>,
         attrs = [{<<"type">>, <<"set">>}],
-        children = Payload}.
+        children = [Payload]}.
 
 item_el(User) when is_binary(User) ->
     #xmlel{name = <<"item">>,
@@ -185,6 +250,7 @@ item_el(User) when is_binary(User) ->
 %%
 %% predicates
 %%
+
 is_xep191_not_available(#xmlel{} = Stanza) ->
     ErrorEl = exml_query:subelement(Stanza, <<"error">>),
     <<"error">> == exml_query:attr(Stanza, <<"type">>)
@@ -226,7 +292,6 @@ is_xep191_push(Type, #xmlel{attrs = A, children = [#xmlel{name = Type,
 is_xep191_push(Type, JIDs, #xmlel{attrs = A, children = [#xmlel{name = Type,
     attrs = Attrs, children = Items}]}=Stanza) ->
     true = escalus_pred:is_iq_set(Stanza),
-%%    {<<"id">>, <<"push">>} = lists:keyfind(<<"id">>, 1, A),
     {<<"xmlns">>, ?NS_BLOCKING} = lists:keyfind(<<"xmlns">>, 1, Attrs),
     F = fun(El) ->
         #xmlel{name = <<"item">>, attrs =  [{<<"jid">>, Value}]} = El,
@@ -236,9 +301,11 @@ is_xep191_push(Type, JIDs, #xmlel{attrs = A, children = [#xmlel{name = Type,
     lists:all(fun(El) -> El end, TrueList);
 is_xep191_push(_, _, _) ->
     false.
+
 %%
 %% helpers
 %%
+
 bare(C) ->  escalus_utils:jid_to_lower(escalus_client:short_jid(C)).
 
 get_blocklist_items(Items) ->
@@ -252,16 +319,10 @@ user_blocks(Blocker, Blockees) when is_list(Blockees) ->
     AddStanza = block_users_stanza(BlockeeJIDs),
     ct:pal("add stanza ~p", [AddStanza]),
     escalus_client:send(Blocker, AddStanza),
-    AddResult = escalus:wait_for_stanza(Blocker),
-    ct:pal("add result ~p", [AddResult]),
-    BlockingPush = escalus:wait_for_stanza(Blocker),
-    ct:pal("add result 2 ~p", [BlockingPush]),
+    Res = escalus:wait_for_stanzas(Blocker, 2),
     CheckPush = fun(E) -> is_xep191_push(<<"block">>, BlockeeJIDs, E) end,
     Preds = [is_iq_result, CheckPush],
-    escalus:assert_many(Preds, [AddResult, BlockingPush]).
-%%    escalus:assert(is_iq_result, AddResult),
-%%    escalus:assert(fun is_xep191_push/3,[<<"block">>, BlockeeJIDs], BlockingPush).
-
+    escalus:assert_many(Preds, Res).
 
 blocklist_is_empty(BlockList) ->
     escalus:assert(is_iq_result, BlockList),
@@ -270,3 +331,33 @@ blocklist_is_empty(BlockList) ->
 blocklist_contains_jid(BlockList, Client) ->
     JID = escalus_utils:jid_to_lower(escalus_client:short_jid(Client)),
     escalus:assert(fun blocklist_result_has/2, [JID], BlockList).
+
+user_unblocks(Unblocker, Unblockees) when is_list(Unblockees) ->
+    UnblockeeJIDs = [ escalus_utils:jid_to_lower(escalus_client:short_jid(B)) || B <- Unblockees ],
+    AddStanza = unblock_users_stanza(UnblockeeJIDs),
+    escalus_client:send(Unblocker, AddStanza),
+    Res = escalus:wait_for_stanzas(Unblocker, 2),
+    CheckPush = fun(E) -> is_xep191_push(<<"unblock">>, UnblockeeJIDs, E) end,
+    Preds = [is_iq_result, CheckPush],
+    escalus:assert_many(Preds, Res);
+user_unblocks(Unblocker, Unblockee) ->
+    JID = escalus_utils:jid_to_lower(escalus_client:short_jid(Unblockee)),
+    escalus_client:send(Unblocker, unblock_user_stanza(JID)),
+    user_gets_remove_result(Unblocker).
+
+blocklist_doesnt_contain_jid(BlockList, Client) ->
+    JID = escalus_utils:jid_to_lower(escalus_client:short_jid(Client)),
+    escalus:assert(is_iq_result, BlockList),
+    ?assertNot(blocklist_result_has(JID, BlockList)).
+
+user_gets_remove_result(Client) ->
+    RemoveResult = escalus:wait_for_stanzas(Client, 2),
+    CheckPush = fun(E) -> is_xep191_push(<<"unblock">>, E) end,
+    Preds = [is_iq_result, CheckPush],
+    escalus:assert_many(Preds, RemoveResult).
+
+
+user_unblocks_all(User) ->
+    escalus_client:send(User, unblock_all_stanza()),
+    user_gets_remove_result(User).
+

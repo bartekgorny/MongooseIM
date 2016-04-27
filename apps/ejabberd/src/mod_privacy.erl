@@ -227,11 +227,18 @@ process_list_get(LUser, LServer, {value, Name}) ->
 process_list_get(_LUser, _LServer, false) ->
     {error, ?ERR_BAD_REQUEST}.
 
-process_iq_set(_, From, _To, #iq{xmlns = ?NS_BLOCKING, sub_el = SubEl} = IQ) ->
+blocking_list_modify(<<"block">>, New, Old) ->
+    ToAdd = lists:subtract(New, Old), %% make sure not to duplicate
+    {ToAdd, ToAdd ++ Old};
+blocking_list_modify(<<"unblock">>, [], _) ->
+    {[], []};
+blocking_list_modify(<<"unblock">>, New, Old) ->
+    {New, lists:subtract(Old, New)}.
+
+process_iq_set(_, From, _To, #iq{xmlns = ?NS_BLOCKING, sub_el = SubEl}) ->
     #jid{luser = LUser, lserver = LServer} = From,
-    #xmlel{children = Els} = SubEl,
+    #xmlel{children = Els, name = Type} = SubEl,
     ?ERROR_MSG("Els ~p", [Els]),
-    %% TODO branch out to service 'unblock' commands
     Usrs = [xml:get_tag_attr_s(<<"jid">>, I) || I <- Els],
     %% TODO fail with bad-request if list is empty
     ?ERROR_MSG("Usrs ~p", [Usrs]),
@@ -244,16 +251,8 @@ process_iq_set(_, From, _To, #iq{xmlns = ?NS_BLOCKING, sub_el = SubEl} = IQ) ->
                       {error, Reason}
               end,
     ?ERROR_MSG("DefList ~p", [DefList]),
-    case DefList of
-        {error, _Reason} ->
-            {error, ?ERR_INTERNAL_SERVER_ERROR};
-        _ ->
-            %% check who is being added
-            ToAdd = lists:subtract(Usrs, DefList),
-            Res = replace_privacy_list(LUser,LServer, <<"default">>, DefList ++ ToAdd),
-            ?ERROR_MSG("replace res ~p", [Res]),
-            complete_iq_set(blocking_command, Res, LUser, LServer, ToAdd, none)
-    end;
+    Res = process_blocking_iq_set(Type, LUser, LServer, DefList, Usrs),
+    complete_iq_set(blocking_command, LUser, LServer, Res);
 process_iq_set(_, From, _To, #iq{xmlns = ?NS_PRIVACY} = IQ) ->
     #jid{luser = LUser, lserver = LServer} = From,
     #iq{sub_el = SubEl} = IQ,
@@ -266,7 +265,7 @@ process_iq_set(_, From, _To, #iq{xmlns = ?NS_PRIVACY} = IQ) ->
                     ListContent = xml:remove_cdata(SubEls),
                     Res = process_list_set(LUser, LServer, ListName,
                              ListContent),
-                    complete_iq_set(privacy_list, Res, LUser,LServer, Name, ListContent);
+                    complete_iq_set(privacy_list, LUser, LServer, {Res, Name, ListContent});
                 <<"active">> ->
                     process_active_set(LUser, LServer, ListName);
                 <<"default">> ->
@@ -278,21 +277,33 @@ process_iq_set(_, From, _To, #iq{xmlns = ?NS_PRIVACY} = IQ) ->
             {error, ?ERR_BAD_REQUEST}
     end.
 
-complete_iq_set(_, {error, Reason}, _, _, _, _) ->
-    {error, Reason};
-complete_iq_set(What, Res, LUser,LServer, Name, ListName) ->
-    broadcast_change(What, Res, LUser,LServer, Name, ListName),
-    {result, []}.
+process_blocking_iq_set(_, _, _, {error, _}, _) ->
+    {error, ?ERR_INTERNAL_SERVER_ERROR};
+process_blocking_iq_set(<<"block">>, _, _, _, []) ->
+    {error, ?ERR_BAD_REQUEST};
+process_blocking_iq_set(Type, LUser, LServer, DefList, Usrs) ->
+    %% check who is being added / removed
+    {Changed, NewList} = blocking_list_modify(Type, Usrs, DefList),
+    Res = replace_privacy_list(LUser, LServer, <<"default">>, NewList),
+    ?ERROR_MSG("replace res ~p", [Res]),
+    {Res, Changed, Type}.
 
-broadcast_change(blocking_command, replaced, LUser, LServer, Blocked, _) ->
-    broadcast_blocking_command(LUser, LServer, Blocked);
-broadcast_change(privacy_list, removed, LUser, LServer, Name, _) ->
-    broadcast_privacy_list(LUser, LServer, Name);
-broadcast_change(privacy_list, replaced, LUser, LServer, Name, List) ->
+complete_iq_set(_, {error, Reason}, _, _) ->
+    {error, Reason};
+complete_iq_set(_, _, _, {error, Reason}) ->
+    {error, Reason};
+complete_iq_set(blocking_command, LUser, LServer, {replaced, Changed, Type}) ->
+    broadcast_blocking_command(LUser, LServer, Changed, Type),
+    {result, []};
+complete_iq_set(privacy_list, LUser, LServer, {removed, Name, _}) ->
+    broadcast_privacy_list(LUser, LServer, Name),
+    {result, []};
+complete_iq_set(privacy_list, LUser, LServer, {replaced, Name, List}) ->
     ?ERROR_MSG("privacy list replaced ~p ~p ~p ~p", [LUser, LServer, Name, List]),
-    broadcast_privacy_list(LUser, LServer, Name, List);
-broadcast_change(_, _, _, _, _, _) ->
-    ok.
+    broadcast_privacy_list(LUser, LServer, Name, List),
+    {result, []};
+complete_iq_set(_, _, _, _) ->
+    {result, []}.
 
 process_default_set(LUser, LServer, {value, Name}) ->
     case ?BACKEND:set_default_list(LUser, LServer, Name) of
@@ -747,9 +758,9 @@ binary_to_order_s(Order) ->
 %% Ejabberd
 %% ------------------------------------------------------------------
 
-broadcast_blocking_command(LUser, LServer, Blocked) ->
+broadcast_blocking_command(LUser, LServer, Changed, Type) ->
     UserJID = jid:make(LUser, LServer, <<>>),
-    ejabberd_sm:route(UserJID, UserJID, broadcast_blocking_command_packet(block, Blocked)).
+    ejabberd_sm:route(UserJID, UserJID, broadcast_blocking_command_packet(Type, Changed)).
 
 broadcast_privacy_list(LUser, LServer, Name) ->
     UserList = #userlist{name = Name, list = []},
@@ -768,29 +779,18 @@ broadcast_privacy_list(LUser, LServer, Name, List) ->
 broadcast_privacy_list_packet(Name, UserList) ->
     {broadcast, {privacy_list, UserList, Name}}.
 
-broadcast_blocking_command_packet(What, JIDs) ->
-    SubEl =
-        case What of
-            block ->
-                #xmlel{name = <<"block">>,
+broadcast_blocking_command_packet(Type, JIDs) ->
+    SubEl = #xmlel{name = Type,
                     attrs = [{<<"xmlns">>, ?NS_BLOCKING}],
                     children = lists:map(
                         fun(JID) ->
                             #xmlel{name = <<"item">>,
                                 attrs = [{<<"jid">>, JID}]}
-                        end, JIDs)};
-            unblock ->
-                #xmlel{name = <<"unblock">>,
-                    attrs = [{<<"xmlns">>, ?NS_BLOCKING}],
-                    children = lists:map(
-                        fun(JID) ->
-                            #xmlel{name = <<"item">>,
-                                attrs = [{<<"jid">>, JID}]}
-                        end, JIDs)};
-            unblock_all ->
-                #xmlel{name = <<"unblock">>,
-                    attrs = [{<<"xmlns">>, ?NS_BLOCKING}]}
-        end,
+                        end, JIDs)},
+%%            unblock_all ->
+%%                #xmlel{name = <<"unblock">>,
+%%                    attrs = [{<<"xmlns">>, ?NS_BLOCKING}]}
+%%        end,
     PrivPushIQ = #iq{type = set, xmlns = ?NS_BLOCKING,
         id = <<"push">>,
         sub_el = [SubEl]},
