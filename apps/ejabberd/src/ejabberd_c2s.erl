@@ -1010,7 +1010,6 @@ process_outgoing_stanza(ToJID, <<"presence">>, Args) ->
     end;
 process_outgoing_stanza(ToJID, <<"iq">>, Args) ->
     {_Attrs, NewEl, FromJID, StateData, Server, _User} = Args,
-    ?ERROR_MSG("POGSIQ ~p", [NewEl]),
     case jlib:iq_query_info(NewEl) of
         #iq{xmlns = Xmlns} = IQ
             when Xmlns == ?NS_PRIVACY;
@@ -1143,7 +1142,6 @@ handle_info(replaced, _StateName, StateData) ->
 %% Process Packets that are to be send to the user
 handle_info({broadcast, Broadcast}, StateName, StateData) ->
     ejabberd_hooks:run(c2s_loop_debug, [{broadcast, Broadcast}]),
-    ?ERROR_MSG("broadcast=~p", [Broadcast]),
     handle_broadcast_result(handle_routed_broadcast(Broadcast, StateData), StateName, StateData);
 handle_info({route, From, To, Packet}, StateName, StateData) ->
     ejabberd_hooks:run(c2s_loop_debug, [{route, From, To, Packet}]),
@@ -2156,7 +2154,6 @@ get_priority_from_presence(PresencePacket) ->
 process_privacy_iq(From, To,
                    #iq{type = Type, sub_el = SubEl} = IQ,
                    StateData) ->
-    ?ERROR_MSG("IQ ~p ~p", [Type, SubEl]),
     {Res, NewStateData} =
     case Type of
         get ->
@@ -2176,14 +2173,12 @@ process_privacy_iq(From, To,
                 R -> {R, StateData}
             end
     end,
-    ?ERROR_MSG("RES ~p", [Res]),
     IQRes = case Res of
                 {result, Result} ->
                     IQ#iq{type = result, sub_el = Result};
                 {error, Error} ->
                     IQ#iq{type = error, sub_el = [SubEl, Error]}
             end,
-    ?ERROR_MSG("IQRES ~p", [IQRes]),
     ejabberd_router:route(To, From, jlib:iq_to_xml(IQRes)),
     NewStateData.
 
@@ -2403,7 +2398,6 @@ flush_messages(N, Acc) ->
 
 -spec route_broadcast(What :: jlib:xmlel(), State :: state()) -> 'ok'.
 route_broadcast(What, StateData) ->
-    ?ERROR_MSG("route broadcast ~p", [What]),
     F = jid:to_bare(StateData#state.jid),
     T = StateData#state.jid,
     PushEl = jlib:replace_from_to(F, T, What),

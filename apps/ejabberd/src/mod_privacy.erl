@@ -164,7 +164,6 @@ process_iq_get(_,
     _To,
     #iq{xmlns = ?NS_BLOCKING} = IQ,
     _) ->
-    ?ERROR_MSG("pig blocking ~p", [IQ]),
     Res = case ?BACKEND:get_privacy_list(LUser, LServer, <<"default">>) of
               {error, not_found} ->
                   {ok, []};
@@ -206,7 +205,6 @@ process_iq_get(_,
 process_lists_get(LUser, LServer, Active) ->
     case ?BACKEND:get_list_names(LUser, LServer) of
         {ok, {Default, ListNames}} ->
-            ?ERROR_MSG("Got ~p, ~p", [Default, ListNames]),
             {result, [list_names_query(Active, Default, ListNames)]};
         {error, not_found} ->
             {result, [empty_list_names_query()]};
@@ -236,12 +234,10 @@ blocking_list_modify(<<"unblock">>, New, Old) ->
     {New, lists:subtract(Old, New)}.
 
 process_iq_set(_, From, _To, #iq{xmlns = ?NS_BLOCKING, sub_el = SubEl}) ->
+    %% collect needed data
     #jid{luser = LUser, lserver = LServer} = From,
     #xmlel{children = Els, name = Type} = SubEl,
-    ?ERROR_MSG("Els ~p", [Els]),
     Usrs = [xml:get_tag_attr_s(<<"jid">>, I) || I <- Els],
-    %% TODO fail with bad-request if list is empty
-    ?ERROR_MSG("Usrs ~p", [Usrs]),
     DefList = case ?BACKEND:get_privacy_list(LUser, LServer, <<"default">>) of
                   {ok, List} ->
                       List;
@@ -250,8 +246,9 @@ process_iq_set(_, From, _To, #iq{xmlns = ?NS_BLOCKING, sub_el = SubEl}) ->
                   {error, Reason} ->
                       {error, Reason}
               end,
-    ?ERROR_MSG("DefList ~p", [DefList]),
+    %% process
     Res = process_blocking_iq_set(Type, LUser, LServer, DefList, Usrs),
+    %% respond / notify
     complete_iq_set(blocking_command, LUser, LServer, Res);
 process_iq_set(_, From, _To, #iq{xmlns = ?NS_PRIVACY} = IQ) ->
     #jid{luser = LUser, lserver = LServer} = From,
@@ -277,15 +274,16 @@ process_iq_set(_, From, _To, #iq{xmlns = ?NS_PRIVACY} = IQ) ->
             {error, ?ERR_BAD_REQUEST}
     end.
 
+%% fail if current default list could not be retrieved
 process_blocking_iq_set(_, _, _, {error, _}, _) ->
     {error, ?ERR_INTERNAL_SERVER_ERROR};
+%% reject block request with empty jid list
 process_blocking_iq_set(<<"block">>, _, _, _, []) ->
     {error, ?ERR_BAD_REQUEST};
 process_blocking_iq_set(Type, LUser, LServer, DefList, Usrs) ->
     %% check who is being added / removed
     {Changed, NewList} = blocking_list_modify(Type, Usrs, DefList),
     Res = replace_privacy_list(LUser, LServer, <<"default">>, NewList),
-    ?ERROR_MSG("replace res ~p", [Res]),
     {Res, Changed, Type}.
 
 complete_iq_set(_, {error, Reason}, _, _) ->
@@ -299,7 +297,6 @@ complete_iq_set(privacy_list, LUser, LServer, {removed, Name, _}) ->
     broadcast_privacy_list(LUser, LServer, Name),
     {result, []};
 complete_iq_set(privacy_list, LUser, LServer, {replaced, Name, List}) ->
-    ?ERROR_MSG("privacy list replaced ~p ~p ~p ~p", [LUser, LServer, Name, List]),
     broadcast_privacy_list(LUser, LServer, Name, List),
     {result, []};
 complete_iq_set(_, _, _, _) ->

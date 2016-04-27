@@ -530,12 +530,15 @@ set_session(SID, User, Server, Resource, Priority, Info) ->
 do_filter(From, To, Packet) ->
     {From, To, Packet}.
 
+%% @doc Routes incoming message to local clients
+%% 'broadcast' means route to all connected clients with the requested JID (there might be
+%% more then one if various resources are connected)
 -spec do_route(From, To, Packet) -> ok when
       From :: ejabberd:jid(),
       To :: ejabberd:jid(),
       Packet :: jlib:xmlel() | ejabberd_c2s:broadcast().
 do_route(From, To, {broadcast, _} = Broadcast) ->
-    ?ERROR_MSG("from=~p,to=~p,broadcast=~p", [From, To, Broadcast]),
+    ?DEBUG("from=~p,to=~p,broadcast=~p", [From, To, Broadcast]),
     #jid{ luser = LUser, lserver = LServer, lresource = LResource} = To,
     case LResource of
         <<>> ->
@@ -547,12 +550,10 @@ do_route(From, To, {broadcast, _} = Broadcast) ->
         _ ->
             case ?SM_BACKEND:get_sessions(LUser, LServer, LResource) of
                 [] ->
-                    ?ERROR_MSG("no session for ~p ~p ~p", [LUser, LServer, LResource]),
                     ok; % do nothing
                 Ss ->
                     Session = lists:max(Ss),
                     Pid = element(2, Session#session.sid),
-                    ?ERROR_MSG("sending ~p to process ~p~n", [Broadcast, Pid]),
                     Pid ! Broadcast
             end
     end;
