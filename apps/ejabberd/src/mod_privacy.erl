@@ -749,7 +749,7 @@ binary_to_order_s(Order) ->
 
 broadcast_blocking_command(LUser, LServer, Blocked) ->
     UserJID = jid:make(LUser, LServer, <<>>),
-    ejabberd_sm:route(UserJID, UserJID, broadcast_blocking_command_packet(Blocked)).
+    ejabberd_sm:route(UserJID, UserJID, broadcast_blocking_command_packet(block, Blocked)).
 
 broadcast_privacy_list(LUser, LServer, Name) ->
     UserList = #userlist{name = Name, list = []},
@@ -768,8 +768,33 @@ broadcast_privacy_list(LUser, LServer, Name, List) ->
 broadcast_privacy_list_packet(Name, UserList) ->
     {broadcast, {privacy_list, UserList, Name}}.
 
-broadcast_blocking_command_packet(Blocked) ->
-    {broadcast, {blocking, {block, Blocked}}}.
+broadcast_blocking_command_packet(What, JIDs) ->
+    SubEl =
+        case What of
+            block ->
+                #xmlel{name = <<"block">>,
+                    attrs = [{<<"xmlns">>, ?NS_BLOCKING}],
+                    children = lists:map(
+                        fun(JID) ->
+                            #xmlel{name = <<"item">>,
+                                attrs = [{<<"jid">>, JID}]}
+                        end, JIDs)};
+            unblock ->
+                #xmlel{name = <<"unblock">>,
+                    attrs = [{<<"xmlns">>, ?NS_BLOCKING}],
+                    children = lists:map(
+                        fun(JID) ->
+                            #xmlel{name = <<"item">>,
+                                attrs = [{<<"jid">>, JID}]}
+                        end, JIDs)};
+            unblock_all ->
+                #xmlel{name = <<"unblock">>,
+                    attrs = [{<<"xmlns">>, ?NS_BLOCKING}]}
+        end,
+    PrivPushIQ = #iq{type = set, xmlns = ?NS_BLOCKING,
+        id = <<"push">>,
+        sub_el = [SubEl]},
+    {broadcast, jlib:iq_to_xml(PrivPushIQ)}.
 
 roster_get_jid_info(Host, User, Server, LJID) ->
     ejabberd_hooks:run_fold(

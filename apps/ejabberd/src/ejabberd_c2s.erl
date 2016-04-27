@@ -1317,10 +1317,8 @@ handle_routed_broadcast({privacy_list, PrivList, PrivListName}, StateData) ->
             PrivPushEl = jlib:replace_from_to(F, T, jlib:iq_to_xml(PrivPushIQ)),
             {send_new, F, T, PrivPushEl, StateData#state{privacy_list = NewPL}}
     end;
-handle_routed_broadcast({blocking, What}, StateData) ->
-    route_blocking(What, StateData),
-    {new_state, StateData};
-handle_routed_broadcast(_, StateData) ->
+handle_routed_broadcast(What, StateData) ->
+    route_broadcast(What, StateData),
     {new_state, StateData}.
 
 -spec handle_broadcast_result(broadcast_result(), StateName :: atom(), StateData :: state()) -> any().
@@ -2403,47 +2401,14 @@ flush_messages(N, Acc) ->
               {N, Acc}
     end.
 
-%%%----------------------------------------------------------------------
-%%% XEP-0191
-%%%----------------------------------------------------------------------
-
--spec route_blocking(What :: blocking_type(), State :: state()) -> 'ok'.
-route_blocking(What, StateData) ->
-    ?ERROR_MSG("route blocking ~p", [What]),
-    SubEl =
-    case What of
-        {block, JIDs} ->
-            #xmlel{name = <<"block">>,
-                   attrs = [{<<"xmlns">>, ?NS_BLOCKING}],
-                   children = lists:map(
-                                fun(JID) ->
-                                        #xmlel{name = <<"item">>,
-                                               attrs = [{<<"jid">>, JID}]}
-                                end, JIDs)};
-        {unblock, JIDs} ->
-            #xmlel{name = <<"unblock">>,
-                   attrs = [{<<"xmlns">>, ?NS_BLOCKING}],
-                   children = lists:map(
-                                fun(JID) ->
-                                        #xmlel{name = <<"item">>,
-                                               attrs = [{<<"jid">>, JID}]}
-                                end, JIDs)};
-        unblock_all ->
-            #xmlel{name = <<"unblock">>,
-                   attrs = [{<<"xmlns">>, ?NS_BLOCKING}]}
-    end,
-    PrivPushIQ = #iq{type = set, xmlns = ?NS_BLOCKING,
-                     id = <<"push">>,
-                     sub_el = [SubEl]},
+-spec route_broadcast(What :: jlib:xmlel(), State :: state()) -> 'ok'.
+route_broadcast(What, StateData) ->
+    ?ERROR_MSG("route broadcast ~p", [What]),
     F = jid:to_bare(StateData#state.jid),
     T = StateData#state.jid,
-    PrivPushEl = jlib:replace_from_to(F, T, jlib:iq_to_xml(PrivPushIQ)),
-    ejabberd_router:route(F, T, PrivPushEl),
-    %% No need to replace active privacy list here,
-    %% blocking pushes are always accompanied by
-    %% Privacy List pushes
+    PushEl = jlib:replace_from_to(F, T, What),
+    ejabberd_router:route(F, T, PushEl),
     ok.
-
 
 -type pack_tree() :: gb_trees:tree(binary() | ejabberd:simple_jid(),
                                    binary() | ejabberd:simple_jid()).
