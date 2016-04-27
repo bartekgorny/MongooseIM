@@ -165,17 +165,21 @@ process_iq_get(_,
     #iq{xmlns = ?NS_BLOCKING} = IQ,
     _) ->
     ?ERROR_MSG("pig blocking ~p", [IQ]),
-    Res = case ?BACKEND:get_default_list(LUser, LServer) of
+    Res = case ?BACKEND:get_privacy_list(LUser, LServer, <<"default">>) of
               {error, not_found} ->
-                  {ok, [empty_blocking_query()]};
+                  {ok, []};
+              {ok, L} ->
+                  {ok, L};
               _ ->
-                  {error, niema}
+                  {error, e}
           end,
     case Res of
-        {ok, R} ->
-            {result, R};
-        {error, E} ->
-            {error, E}
+        {ok, []} ->
+            {result, empty_blocking_query()};
+        {ok, Lst} ->
+            {result, blocking_query(Lst)};
+        {error, _} ->
+            {error, ?ERR_INTERNAL_SERVER_ERROR}
     end;
 %% handler for privacy list iqs
 process_iq_get(_,
@@ -259,9 +263,10 @@ process_iq_set(_, From, _To, #iq{xmlns = ?NS_PRIVACY} = IQ) ->
             ListName = xml:get_attr(<<"name">>, Attrs),
             case Name of
                 <<"list">> ->
+                    ListContent = xml:remove_cdata(SubEls),
                     Res = process_list_set(LUser, LServer, ListName,
-                             xml:remove_cdata(SubEls)),
-                    complete_iq_set(privacy_list, Res, LUser,LServer, Name, ListName);
+                             ListContent),
+                    complete_iq_set(privacy_list, Res, LUser,LServer, Name, ListContent);
                 <<"active">> ->
                     process_active_set(LUser, LServer, ListName);
                 <<"default">> ->
@@ -283,8 +288,9 @@ broadcast_change(blocking_command, replaced, LUser, LServer, Blocked, _) ->
     broadcast_blocking_command(LUser, LServer, Blocked);
 broadcast_change(privacy_list, removed, LUser, LServer, Name, _) ->
     broadcast_privacy_list(LUser, LServer, Name);
-broadcast_change(privacy_list, removed, LUser, LServer, Name, ListName) ->
-    broadcast_privacy_list(LUser, LServer, Name, ListName);
+broadcast_change(privacy_list, replaced, LUser, LServer, Name, List) ->
+    ?ERROR_MSG("privacy list replaced ~p ~p ~p ~p", [LUser, LServer, Name, List]),
+    broadcast_privacy_list(LUser, LServer, Name, List);
 broadcast_change(_, _, _, _, _, _) ->
     ok.
 
@@ -620,6 +626,12 @@ empty_blocking_query() ->
     #xmlel{
         name = <<"blocklist">>,
         attrs = [{<<"xmlns">>, ?NS_BLOCKING}]}.
+
+blocking_query(Lst) ->
+    #xmlel{
+        name = <<"blocklist">>,
+        attrs = [{<<"xmlns">>, ?NS_BLOCKING}],
+        children = [#xmlel{name= <<"item">>, attrs = [{<<"jid">>, J}]} || J <- Lst]}.
 
 empty_list_names_query() ->
     #xmlel{
