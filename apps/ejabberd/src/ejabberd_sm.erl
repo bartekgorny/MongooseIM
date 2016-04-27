@@ -535,7 +535,7 @@ do_filter(From, To, Packet) ->
       To :: ejabberd:jid(),
       Packet :: jlib:xmlel() | ejabberd_c2s:broadcast().
 do_route(From, To, {broadcast, _} = Broadcast) ->
-    ?DEBUG("from=~p,to=~p,broadcast=~p", [From, To, Broadcast]),
+    ?ERROR_MSG("from=~p,to=~p,broadcast=~p", [From, To, Broadcast]),
     #jid{ luser = LUser, lserver = LServer, lresource = LResource} = To,
     case LResource of
         <<>> ->
@@ -547,11 +547,12 @@ do_route(From, To, {broadcast, _} = Broadcast) ->
         _ ->
             case ?SM_BACKEND:get_sessions(LUser, LServer, LResource) of
                 [] ->
+                    ?ERROR_MSG("no session for ~p ~p ~p", [LUser, LServer, LResource]),
                     ok; % do nothing
                 Ss ->
                     Session = lists:max(Ss),
                     Pid = element(2, Session#session.sid),
-                    ?DEBUG("sending to process ~p~n", [Pid]),
+                    ?ERROR_MSG("sending ~p to process ~p~n", [Broadcast, Pid]),
                     Pid ! Broadcast
             end
     end;

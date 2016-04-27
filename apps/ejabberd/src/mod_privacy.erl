@@ -123,6 +123,7 @@ start(Host, Opts) ->
                                                  get_default_list]),
     ?BACKEND:init(Host, Opts),
 %%    IQDisc = gen_mod:get_opt(iqdisc, Opts, one_queue),
+    mod_disco:register_feature(Host, ?NS_BLOCKING),
     ejabberd_hooks:add(privacy_iq_get, Host,
                ?MODULE, process_iq_get, 50),
     ejabberd_hooks:add(privacy_iq_set, Host,
@@ -157,11 +158,32 @@ stop(Host) ->
 %% Handlers
 %% ------------------------------------------------------------------
 
+%% handler for blocking commands
+process_iq_get(_,
+    _From = #jid{luser = LUser, lserver = LServer},
+    _To,
+    #iq{xmlns = ?NS_BLOCKING} = IQ,
+    _) ->
+    ?ERROR_MSG("pig blocking ~p", [IQ]),
+    Res = case ?BACKEND:get_default_list(LUser, LServer) of
+              {error, not_found} ->
+                  {ok, [empty_blocking_query()]};
+              _ ->
+                  {error, niema}
+          end,
+    case Res of
+        {ok, R} ->
+            {result, R};
+        {error, E} ->
+            {error, E}
+    end;
+%% handler for privacy list iqs
 process_iq_get(_,
         _From = #jid{luser = LUser, lserver = LServer},
         _To,
-        #iq{sub_el = #xmlel{children = Els}},
+        #iq{xmlns = ?NS_PRIVACY} = IQ,
         #userlist{name = Active}) ->
+    #iq{sub_el = #xmlel{children = Els}} = IQ,
     case xml:remove_cdata(Els) of
         [] ->
             process_lists_get(LUser, LServer, Active);
@@ -180,6 +202,7 @@ process_iq_get(_,
 process_lists_get(LUser, LServer, Active) ->
     case ?BACKEND:get_list_names(LUser, LServer) of
         {ok, {Default, ListNames}} ->
+            ?ERROR_MSG("Got ~p, ~p", [Default, ListNames]),
             {result, [list_names_query(Active, Default, ListNames)]};
         {error, not_found} ->
             {result, [empty_list_names_query()]};
@@ -200,16 +223,45 @@ process_list_get(LUser, LServer, {value, Name}) ->
 process_list_get(_LUser, _LServer, false) ->
     {error, ?ERR_BAD_REQUEST}.
 
-process_iq_set(_, From, _To, #iq{sub_el = SubEl}) ->
+process_iq_set(_, From, _To, #iq{xmlns = ?NS_BLOCKING, sub_el = SubEl} = IQ) ->
     #jid{luser = LUser, lserver = LServer} = From,
+    #xmlel{children = Els} = SubEl,
+    ?ERROR_MSG("Els ~p", [Els]),
+    %% TODO branch out to service 'unblock' commands
+    Usrs = [xml:get_tag_attr_s(<<"jid">>, I) || I <- Els],
+    %% TODO fail with bad-request if list is empty
+    ?ERROR_MSG("Usrs ~p", [Usrs]),
+    DefList = case ?BACKEND:get_privacy_list(LUser, LServer, <<"default">>) of
+                  {ok, List} ->
+                      List;
+                  {error, not_found} ->
+                      [];
+                  {error, Reason} ->
+                      {error, Reason}
+              end,
+    ?ERROR_MSG("DefList ~p", [DefList]),
+    case DefList of
+        {error, _Reason} ->
+            {error, ?ERR_INTERNAL_SERVER_ERROR};
+        _ ->
+            %% check who is being added
+            ToAdd = lists:subtract(Usrs, DefList),
+            Res = replace_privacy_list(LUser,LServer, <<"default">>, DefList ++ ToAdd),
+            ?ERROR_MSG("replace res ~p", [Res]),
+            complete_iq_set(blocking_command, Res, LUser, LServer, ToAdd, none)
+    end;
+process_iq_set(_, From, _To, #iq{xmlns = ?NS_PRIVACY} = IQ) ->
+    #jid{luser = LUser, lserver = LServer} = From,
+    #iq{sub_el = SubEl} = IQ,
     #xmlel{children = Els} = SubEl,
     case xml:remove_cdata(Els) of
         [#xmlel{name = Name, attrs = Attrs, children = SubEls}] ->
             ListName = xml:get_attr(<<"name">>, Attrs),
             case Name of
                 <<"list">> ->
-                    process_list_set(LUser, LServer, ListName,
-                             xml:remove_cdata(SubEls));
+                    Res = process_list_set(LUser, LServer, ListName,
+                             xml:remove_cdata(SubEls)),
+                    complete_iq_set(privacy_list, Res, LUser,LServer, Name, ListName);
                 <<"active">> ->
                     process_active_set(LUser, LServer, ListName);
                 <<"default">> ->
@@ -220,6 +272,21 @@ process_iq_set(_, From, _To, #iq{sub_el = SubEl}) ->
         _ ->
             {error, ?ERR_BAD_REQUEST}
     end.
+
+complete_iq_set(_, {error, Reason}, _, _, _, _) ->
+    {error, Reason};
+complete_iq_set(What, Res, LUser,LServer, Name, ListName) ->
+    broadcast_change(What, Res, LUser,LServer, Name, ListName),
+    {result, []}.
+
+broadcast_change(blocking_command, replaced, LUser, LServer, Blocked, _) ->
+    broadcast_blocking_command(LUser, LServer, Blocked);
+broadcast_change(privacy_list, removed, LUser, LServer, Name, _) ->
+    broadcast_privacy_list(LUser, LServer, Name);
+broadcast_change(privacy_list, removed, LUser, LServer, Name, ListName) ->
+    broadcast_privacy_list(LUser, LServer, Name, ListName);
+broadcast_change(_, _, _, _, _, _) ->
+    ok.
 
 process_default_set(LUser, LServer, {value, Name}) ->
     case ?BACKEND:set_default_list(LUser, LServer, Name) of
@@ -266,9 +333,7 @@ process_list_set(_LUser, _LServer, false, _Els) ->
 remove_privacy_list(LUser, LServer, Name) ->
     case ?BACKEND:remove_privacy_list(LUser, LServer, Name) of
         ok ->
-            UserList = #userlist{name = Name, list = []},
-            broadcast_privacy_list(LUser, LServer, Name, UserList),
-            {result, []};
+            removed;
         %% TODO if Name == Active -> conflict
         {error, conflict} ->
             {error, ?ERR_CONFLICT};
@@ -279,10 +344,7 @@ remove_privacy_list(LUser, LServer, Name) ->
 replace_privacy_list(LUser, LServer, Name, List) ->
     case ?BACKEND:replace_privacy_list(LUser, LServer, Name, List) of
         ok ->
-            NeedDb = is_list_needdb(List),
-            UserList = #userlist{name = Name, list = List, needdb = NeedDb},
-            broadcast_privacy_list(LUser, LServer, Name, UserList),
-            {result, []};
+            replaced;
         {error, _Reason} ->
             {error, ?ERR_INTERNAL_SERVER_ERROR}
     end.
@@ -554,6 +616,11 @@ add_item(Item, Items) ->
 %% Serialization
 %% ------------------------------------------------------------------
 
+empty_blocking_query() ->
+    #xmlel{
+        name = <<"blocklist">>,
+        attrs = [{<<"xmlns">>, ?NS_BLOCKING}]}.
+
 empty_list_names_query() ->
     #xmlel{
         name = <<"query">>,
@@ -668,13 +735,29 @@ binary_to_order_s(Order) ->
 %% Ejabberd
 %% ------------------------------------------------------------------
 
-broadcast_privacy_list(LUser, LServer, Name, UserList) ->
+broadcast_blocking_command(LUser, LServer, Blocked) ->
+    UserJID = jid:make(LUser, LServer, <<>>),
+    ejabberd_sm:route(UserJID, UserJID, broadcast_blocking_command_packet(Blocked)).
+
+broadcast_privacy_list(LUser, LServer, Name) ->
+    UserList = #userlist{name = Name, list = []},
+    UserJID = jid:make(LUser, LServer, <<>>),
+    ejabberd_sm:route(UserJID, UserJID, broadcast_privacy_list_packet(Name, UserList)).
+
+broadcast_privacy_list(LUser, LServer, Name, {value, List}) ->
+    broadcast_privacy_list(LUser, LServer, Name, List);
+broadcast_privacy_list(LUser, LServer, Name, List) ->
+    NeedDb = is_list_needdb(List),
+    UserList = #userlist{name = Name, list = List, needdb = NeedDb},
     UserJID = jid:make(LUser, LServer, <<>>),
     ejabberd_sm:route(UserJID, UserJID, broadcast_privacy_list_packet(Name, UserList)).
 
 %% TODO this is dirty
 broadcast_privacy_list_packet(Name, UserList) ->
     {broadcast, {privacy_list, UserList, Name}}.
+
+broadcast_blocking_command_packet(Blocked) ->
+    {broadcast, {blocking, {block, Blocked}}}.
 
 roster_get_jid_info(Host, User, Server, LJID) ->
     ejabberd_hooks:run_fold(
