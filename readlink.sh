@@ -1,6 +1,6 @@
 #!/bin/sh
 # used for MacOS, because readlink -f does not work here.
-# see http://stackoverflow.com/questions/1055671/how-can-i-get-the-behavior-of-gnus-readlink-f-on-a-mac
+# ee http://stackoverflow.com/questions/1055671/how-can-i-get-the-behavior-of-gnus-readlink-f-on-a-mac
 
 TARGET_FILE=$1
 
