@@ -312,15 +312,18 @@ process_data([Element|Els], #state{c2s_pid = C2SPid} = State)
         C2SPid == undefined ->
             State;
         true ->
+            ?ERROR_MSG("Element: ~p~n", [Element]),
             catch gen_fsm:send_event(C2SPid, element_wrapper(Element)),
             process_data(Els, State)
     end;
 %% Data processing for connectors receivind data as string.
+%% mtr entry_point for c2s
 process_data(Data, #state{parser = Parser,
                           shaper_state = ShaperState,
                           max_stanza_size = MaxSize,
                           c2s_pid = C2SPid} = State) ->
     ?DEBUG("Received XML on stream = \"~s\"", [Data]),
+    ?ERROR_MSG("Data: ~p~n", [Data]),
     Size = size(Data),
     mongoose_metrics:update([data, xmpp, received, xml_stanza_size], Size),
 

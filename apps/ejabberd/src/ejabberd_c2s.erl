@@ -920,6 +920,7 @@ session_established(closed, StateData) ->
 
 %% @doc Process packets sent by user (coming from user on c2s XMPP
 %% connection)
+%% mtr wrap it here, so we don't have to change state machine's code
 -spec process_outgoing_stanza(El :: jlib:xmlel(), state()) -> fsm_return().
 process_outgoing_stanza(El, StateData) ->
     #xmlel{name = Name, attrs = Attrs} = El,
@@ -2577,6 +2578,7 @@ resend_csi_buffer(State) ->
     NewState = flush_csi_buffer(State),
     fsm_next_state(session_established, NewState#state{csi_state=active}).
 
+%% mtr unwrap it here, from now on it only buffering and sending
 ship_to_local_user(Packet, State, StateName) ->
     maybe_csi_inactive_optimisation(Packet, State, StateName).
 
