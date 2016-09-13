@@ -175,7 +175,7 @@ paths:
                 description: the recipient of the message
                 type: string
                 format: JID
-              msg:
+              body:
                 description: the message text
                 type: string
       description: Send a chat message from one user to another.
@@ -366,7 +366,7 @@ paths:
               sender:
                 type: string
                 description: The sender's JID. Message will be sent on their behalf
-              message:
+              body:
                 type: string
                 description: The message text
       responses:
@@ -480,7 +480,7 @@ paths:
               sender:
                 type: string
                 description: The sender's JID. Message will be sent on their behalf
-              message:
+              body:
                 type: string
                 description: The message text
       responses:
