@@ -1538,15 +1538,15 @@ maybe_send_element_safe(State, El) ->
         _ -> error
     end.
 
-send_element(#state{server = Server, sockmod = SockMod} = StateData, El)
+send_element(#state{server = Server, sockmod = SockMod, jid = UserJid} = StateData, El)
   when StateData#state.xml_socket ->
     ejabberd_hooks:run(xmpp_send_element,
-                       Server, [Server, El]),
+                       Server, [Server, UserJid, El]),
     SockMod:send_xml(StateData#state.socket,
                      {xmlstreamelement, El});
-send_element(#state{server = Server} = StateData, El) ->
+send_element(#state{server = Server, jid = UserJid} = StateData, El) ->
     ejabberd_hooks:run(xmpp_send_element,
-                       Server, [Server, El]),
+                       Server, [Server, UserJid, El]),
     send_text(StateData, exml:to_binary(El)).
 
 
