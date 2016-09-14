@@ -182,7 +182,7 @@ paths:
       responses:
         200:
           description: Message was sent
-  /messages/{caller}/{other}/{limit}:
+  /messages/{caller}/{other}:
     get:
       parameters:
         - name: caller
@@ -196,7 +196,7 @@ paths:
           required: true
           type: string
         - name: limit
-          in: path
+          in: query
           description: An upper bound on the number of messages to fetch from the archive
           required: true
           type: integer
@@ -220,7 +220,7 @@ paths:
                   type: string
                 body:
                   type: string
-  /messages/{caller}/{other}/{before}/{limit}:
+  /messages/{caller}/{other}/{before}:
     get:
       parameters:
         - name: caller
@@ -239,7 +239,7 @@ paths:
           required: true
           type: integer
         - name: limit
-          in: path
+          in: query
           description: An upper bound on the number of messages to fetch from the archive
           required: true
           type: integer
