@@ -182,66 +182,28 @@ paths:
       responses:
         200:
           description: Message was sent
-  /messages/{caller}/{other}:
+  /messages/{me}/{with}:
     get:
       parameters:
-        - name: caller
+        - name: me
           in: path
           description: The user archive in question
           required: true
           type: string
-        - name: other
-          in: path
-          description: The other party
-          required: true
-          type: string
-        - name: limit
-          in: query
-          description: An upper bound on the number of messages to fetch from the archive
-          required: true
-          type: integer
-      description: Retrieve recent message from archive.
-      responses:
-        200:
-          description: The messages archived for the given user and the other party
-          schema:
-            title: records
-            type: array
-            items:
-              title: record
-              type: object
-              properties:
-                sender:
-                  type: string
-                  format: JID
-                timestamp:
-                  type: integer
-                message_id:
-                  type: string
-                body:
-                  type: string
-  /messages/{caller}/{other}/{before}:
-    get:
-      parameters:
-        - name: caller
-          in: path
-          description: The user archive in question
-          required: true
-          type: string
-        - name: other
+        - name: with
           in: path
           description: The other party
           required: true
           type: string
         - name: before
-          in: path
-          description: Messages earlier then the given timestamp
-          required: true
+          in: query
+          description: Messages earlier then the given timestamp (defaults to now)
+          required: false
           type: integer
         - name: limit
           in: query
-          description: An upper bound on the number of messages to fetch from the archive
-          required: true
+          description: An upper bound on the number of messages to fetch from the archive (defaults to 100)
+          required: false
           type: integer
       description: Retrieve recent message from archive.
       responses:
@@ -298,7 +260,7 @@ paths:
           schema:
             title: roomName
             type: string
-  /muc-lights/{XMPPHost}/{roomName}:
+  /muc-lights/{XMPPHost}/{roomName}/participants:
     parameters:
       -
         name: XMPPHost
@@ -312,7 +274,7 @@ paths:
         description: The MUC Light room's **name** (i.e. **not** the room's JID)
         required: true
         type: string
-    put:
+    post:
       description: Invite one user on behalf of another.
       consumes:
         - application/json
@@ -407,7 +369,7 @@ paths:
           schema:
             title: roomName
             type: string
-  /mucs/{XMPPHost}/{roomName}:
+  /mucs/{XMPPHost}/{roomName}/participants:
     parameters:
       -
         name: XMPPHost
@@ -421,7 +383,7 @@ paths:
         description: The leading part of the MUC room's JID
         required: true
         type: string
-    put:
+    post:
       description: Invite one user on behalf of another.
       consumes:
         - application/json
