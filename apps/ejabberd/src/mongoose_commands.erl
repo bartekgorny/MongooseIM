@@ -119,7 +119,7 @@
           function :: atom(),                         %% function to call
           action :: action(),                         %% so that the HTTP side can decide which verb to require
           args = [] :: [argspec()],                   %% this is both for introspection and type check on call
-          optargs = [] :: [{atom(), typedef(), term()}],%% arg which has a default value and is optional
+          optargs = [] :: [optargspec()],             %% arg which has a default value and is optional
           caller_pos :: integer(),                    %% internal use
           identifiers = [] :: [atom()],               %% resource identifiers, a subset of args
           security_policy = [admin] :: security(),    %% permissions required to run this command
@@ -138,6 +138,8 @@
                   | {argspec()} % a tuple of a few args (can be of any size)
                   | [typedef()]. % a list, but one element
 
+-type optargspec() :: {atom(), typedef(), term()}. % name, type, default value
+
 -type security() :: [admin | user]. %% later acl option will be added
 
 -type errortype() :: denied | not_implemented | type_error | internal. %% we should agree on a set of atoms so that the
@@ -147,6 +149,7 @@
 
 -export_type([t/0]).
 -export_type([argspec/0]).
+-export_type([optargspec/0]).
 -export_type([errortype/0]).
 -export_type([failure/0]).
 
@@ -173,6 +176,7 @@
          subcategory/1,
          desc/1,
          args/1,
+         optargs/1,
          arity/1,
          func_arity/1,
          identifiers/1,
@@ -259,6 +263,10 @@ desc(Cmd) ->
 -spec args(t()) -> term().
 args(Cmd) ->
     Cmd#mongoose_command.args.
+
+-spec optargs(t()) -> term().
+optargs(Cmd) ->
+    Cmd#mongoose_command.optargs.
 
 -spec identifiers(t()) -> [atom()].
 identifiers(Cmd) ->
