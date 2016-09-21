@@ -106,8 +106,9 @@ process_request(Method, Command, Req, #http_api_state{bindings = Binds, entity =
     when ((Method == <<"GET">>) or (Method == <<"DELETE">>)) ->
     {QVals, _} = cowboy_req:qs_vals(Req),
     QV = [{binary_to_existing_atom(K, utf8), V} || {K, V} <- QVals],
-    BindsReversed = Binds ++ QV ++ maybe_add_caller(Entity),
-    handle_request(Method, Command, BindsReversed, Req, State).
+    BindsAndVars = Binds ++ QV ++ maybe_add_caller(Entity),
+    ?ERROR_MSG("Binds: ~p", [BindsAndVars]),
+    handle_request(Method, Command, BindsAndVars, Req, State).
 
 -spec handle_request(method(), mongoose_commands:t(), args_applied(), term(), #http_api_state{}) ->
     {any(), any(), #http_api_state{}}.
@@ -275,10 +276,7 @@ get_allowed_methods(Entity) ->
 -spec maybe_add_bindings(mongoose_commands:t(), admin|user) -> iolist().
 maybe_add_bindings(Command, Entity) ->
     Action = mongoose_commands:action(Command),
-    QueryParams = mongoose_commands:queryparams(Command),
-    Args0 = mongoose_commands:args(Command),
-    Args = [El || {Key, _Value} = El <- Args0, true =/= proplists:is_defined(Key, QueryParams)],
-    % we don't add bindings for params defined as 'queryparams'
+    Args = mongoose_commands:args(Command),
     BindAndBody = both_bind_and_body(Action),
     case BindAndBody of
         true ->
