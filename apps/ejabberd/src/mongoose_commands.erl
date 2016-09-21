@@ -350,7 +350,7 @@ add_defaults(Args, Opts) when is_map(Args) ->
 
 % @doc This performs many checks - types, permissions etc, may throw one of many exceptions
 %% returns what the func returned or just ok if command spec tells so
--spec check_and_execute(caller(), t(), [term()]) -> term().
+-spec check_and_execute(caller(), t(), [term()]|map()) -> term().
 check_and_execute(Caller, Command, Args) when is_map(Args) ->
     Args1 = add_defaults(Args, Command#mongoose_command.optargs),
     ArgList = maps_to_list(Args1, Command#mongoose_command.args, Command#mongoose_command.optargs),

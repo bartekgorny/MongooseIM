@@ -118,7 +118,7 @@ handle_request(Method, Command, Args, Req, #http_api_state{entity = Entity} = St
 
 -type correct_result() :: ok | {ok, any()}.
 -type error_result() ::  mongoose_commands:failure() |
-                         {error, bad_request}.
+                         {error, bad_request, any()}.
 -type expected_result() :: correct_result() | error_result().
 
 -spec handle_result(Method, Result, Req, State) -> Return when
@@ -193,7 +193,7 @@ execute_command(ArgMap, Command, Entity) ->
             {error, bad_request, R}
     end.
 
--spec do_execute_command(arg_values(), mongoose_commands:t(), admin|binary()) -> ok | {ok, any()}.
+-spec do_execute_command(map(), mongoose_commands:t(), admin|binary()) -> ok | {ok, any()}.
 do_execute_command(ArgMap, Command, Entity) ->
     mongoose_commands:execute(Entity, mongoose_commands:name(Command), ArgMap).
 
