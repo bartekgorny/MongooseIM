@@ -94,7 +94,7 @@ create_admin_url_path(Command) ->
 create_user_url_path(Command) ->
     ["/", mongoose_commands:category(Command), maybe_add_bindings(Command, user)].
 
--spec process_request(method(), mongoose_commands:ct(), any(), #http_api_state{}) -> {any(), any(), #http_api_state{}}.
+-spec process_request(method(), mongoose_commands:ct(), any(), http_api_state()) -> {any(), any(), http_api_state()}.
 process_request(Method, Command, Req, #http_api_state{bindings = Binds, entity = Entity} = State)
     when ((Method == <<"POST">>) or (Method == <<"PUT">>)) ->
     {Params, Req2} = Req,
@@ -109,8 +109,8 @@ process_request(Method, Command, Req, #http_api_state{bindings = Binds, entity =
     BindsAndVars = Binds ++ QV ++ maybe_add_caller(Entity),
     handle_request(Method, Command, BindsAndVars, Req, State).
 
--spec handle_request(method(), mongoose_commands:t(), args_applied(), term(), #http_api_state{}) ->
-    {any(), any(), #http_api_state{}}.
+-spec handle_request(method(), mongoose_commands:t(), args_applied(), term(), http_api_state()) ->
+    {any(), any(), http_api_state()}.
 handle_request(Method, Command, Args, Req, #http_api_state{entity = Entity} = State) ->
     ConvertedArgs = check_and_extract_args(mongoose_commands:args(Command), mongoose_commands:optargs(Command), Args),
     Result = execute_command(ConvertedArgs, Command, Entity),
@@ -125,8 +125,8 @@ handle_request(Method, Command, Args, Req, #http_api_state{entity = Entity} = St
       Method :: method(),
       Result :: expected_result(),
       Req :: cowboy_req:req(),
-      State :: #http_api_state{},
-      Return :: {any(), cowboy_req:req(), #http_api_state{}}.
+      State :: http_api_state(),
+      Return :: {any(), cowboy_req:req(), http_api_state()}.
 handle_result(Verb, ok, Req, State) ->
     handle_result(Verb, {ok, nocontent}, Req, State);
 %%    {ok, Req2} = cowboy_req:reply(200, Req),
@@ -299,14 +299,14 @@ to_atom(Atom) when is_atom(Atom) ->
 %%--------------------------------------------------------------------
 %% HTTP utils
 %%--------------------------------------------------------------------
--spec error_response(integer() | atom(), any(), #http_api_state{}) -> {halt, any(), #http_api_state{}}.
+-spec error_response(integer() | atom(), any(), http_api_state()) -> {halt, any(), http_api_state()}.
 error_response(Code, Req, State) when is_integer(Code) ->
     {ok, Req1} = cowboy_req:reply(Code, Req),
     {halt, Req1, State};
 error_response(ErrorType, Req, State) ->
     error_response(error_code(ErrorType), Req, State).
 
--spec error_response(any(), any(), any(), #http_api_state{}) -> {halt, any(), #http_api_state{}}.
+-spec error_response(any(), any(), any(), http_api_state()) -> {halt, any(), http_api_state()}.
 error_response(Code, Reason, Req, State) when is_integer(Code) ->
     {ok, Req1} = cowboy_req:reply(Code, [], Reason, Req),
     {halt, Req1, State};

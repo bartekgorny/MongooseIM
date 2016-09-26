@@ -583,9 +583,9 @@ mapget(K, Map) ->
 maps_to_list(Map, Args, Optargs) ->
     SpecLen = length(Args) + length(Optargs),
     ALen = maps:size(Map),
-    if SpecLen =/= ALen ->
-        th("Invalid number of arguments: should be ~p, got ~p", [SpecLen, ALen]);
-        true -> ok
+    case SpecLen of
+        ALen -> ok;
+        _ -> th("Invalid number of arguments: should be ~p, got ~p", [SpecLen, ALen])
     end,
     [mapget(K, Map) || {K, _} <- Args] ++ [mapget(K, Map) || {K, _, _} <- Optargs].
 
