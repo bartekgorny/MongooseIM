@@ -182,6 +182,44 @@ paths:
       responses:
         200:
           description: Message was sent
+  /messages/{me}:
+    get:
+      parameters:
+        - name: me
+          in: path
+          description: The user archive in question
+          required: true
+          type: string
+        - name: before
+          in: query
+          description: Messages earlier then the given timestamp (defaults to now)
+          required: false
+          type: integer
+        - name: limit
+          in: query
+          description: An upper bound on the number of messages to fetch from the archive (defaults to 100)
+          required: false
+          type: integer
+      description: Retrieve recent message from my archive.
+      responses:
+        200:
+          description: The messages archived for the given user
+          schema:
+            title: records
+            type: array
+            items:
+              title: record
+              type: object
+              properties:
+                sender:
+                  type: string
+                  format: JID
+                timestamp:
+                  type: integer
+                message_id:
+                  type: string
+                body:
+                  type: string
   /messages/{me}/{with}:
     get:
       parameters:
@@ -205,7 +243,7 @@ paths:
           description: An upper bound on the number of messages to fetch from the archive (defaults to 100)
           required: false
           type: integer
-      description: Retrieve recent message from archive.
+      description: Retrieve recent message from archive, only those exchanged with the given contact.
       responses:
         200:
           description: The messages archived for the given user and the other party
