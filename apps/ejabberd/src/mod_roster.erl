@@ -929,7 +929,7 @@ get_jid_info(_, User, Server, JID) ->
     case get_jid_info_default(LJID, User, Server, error) of
         error ->
             LRJID = jid:to_lower(jid:to_bare(JID)),
-            get_jid_info_default(LRJID, User, Server, {none, []);
+            get_jid_info_default(LRJID, User, Server, {none, []});
         Result ->
             Result
     end.
