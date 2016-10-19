@@ -101,7 +101,8 @@ make_logfun(Name, Def, out) ->
     end;
 make_logfun(Name, Def, in) ->
     Ff = make_fun(Def),
-    fun(_, T, M) ->
+    fun(_, M) ->
+        T = exml_query:attr(M, <<"to">>),
         case Ff(T, M) of
             true ->
                 Mm = format_message(Name, M),
@@ -122,6 +123,8 @@ make_fun(Def) ->
         apply_filterlist(U, M, Filters)
     end.
 
+apply_filterlist(_, undefined, _) ->
+    false;
 apply_filterlist(_, _, []) ->
     true;
 apply_filterlist(U, M, [Fltr|Tail]) ->
