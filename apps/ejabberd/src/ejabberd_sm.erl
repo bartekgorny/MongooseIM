@@ -754,7 +754,7 @@ is_privacy_allow(From, To, Packet) ->
       From :: ejabberd:jid(),
       To :: ejabberd:jid(),
       Packet :: jlib:xmlel() | mongoose_acc:t(),
-      PrivacyList :: #userlist{}.
+      PrivacyList :: mongoose_privacy:userlist().
 is_privacy_allow(From, To, Packet, PrivacyList) ->
     User = To#jid.user,
     Server = To#jid.server,
