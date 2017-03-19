@@ -21,7 +21,7 @@ all() ->
 groups() ->
     [
      {basic, [sequence],
-      [store_and_retrieve, init_from_element, get_and_require ]
+      [store_and_retrieve, init_from_element, get_and_require, strip ]
      }
     ].
 
@@ -64,6 +64,25 @@ get_and_require(_C) ->
     ?assertEqual(IqData#iq.xmlns, <<"urn:ietf:params:xml:ns:xmpp-session">>),
     ok.
 
+strip(_C) ->
+    Acc = mongoose_acc:from_element(iq_stanza()),
+    Acc1 = mongoose_acc:update(#{from => <<"ja">>, from_jid => <<"jajid">>,
+        to => <<"ty">>, to_jid => <<"tyjid">>}, Acc),
+    Acc2 = mongoose_acc:require([command, xmlns, send_type], Acc1),
+    ?assertEqual(mongoose_acc:get(xmlns, Acc2), <<"urn:ietf:params:xml:ns:xmpp-session">>),
+    ?assertEqual(mongoose_acc:get(type, Acc2), <<"set">>),
+    ?assertEqual(mongoose_acc:get(send_type, Acc2), <<"set">>),
+    Acc3 = mongoose_acc:put(to_send, another_iq_stanza(), Acc2),
+    Acc4 = mongoose_acc:require(send_type, Acc3),
+    ?assertEqual(mongoose_acc:get(type, Acc4), <<"set">>),
+    ?assertEqual(mongoose_acc:get(send_type, Acc4), <<"pet">>),
+    Ref = mongoose_acc:get(ref, Acc4),
+    NAcc = mongoose_acc:strip(Acc4),
+    ?assertEqual(mongoose_acc:get(type, NAcc), <<"pet">>),
+    ?assertEqual(mongoose_acc:get(xmlns, NAcc, niema), niema),
+    ?assertEqual(mongoose_acc:get(to_jid, NAcc), <<"tyjid">>),
+    ?assertEqual(mongoose_acc:get(ref, NAcc, ref), Ref).
+
 
 sample_stanza() ->
     {xmlel, <<"iq">>,
@@ -83,3 +102,10 @@ iq_stanza() ->
             [{<<"xmlns">>,<<"urn:ietf:params:xml:ns:xmpp-session">>}],
             []}]}.
 
+another_iq_stanza() ->
+    {xmlel,<<"iq">>,
+        [{<<"type">>,<<"pet">>},
+            {<<"id">>,<<"a31baa4c478896af19b76bac799b65ed">>}],
+        [{xmlel,<<"session">>,
+            [{<<"xmlns">>,<<"urn:ietf:params:xml:ns:xmpp-session">>}],
+            []}]}.
