@@ -425,7 +425,7 @@ is_type_match(Type, Value, JID, Subscription, Groups) ->
 
 remove_user(Acc, User, Server) ->
     R = remove_user(User, Server),
-    ?OK_OR_LOG(R),
+    mongoose_lib:log_if_backend_error(R),
     Acc.
 
 remove_user(User, Server) ->
