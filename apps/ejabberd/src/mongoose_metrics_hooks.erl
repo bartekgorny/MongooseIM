@@ -130,7 +130,8 @@ xmpp_bounce_message(Acc, Server, _) ->
     mongoose_metrics:update(Server, xmppMessageBounced, 1),
     Acc.
 
--spec xmpp_stanza_dropped(map(), ejabberd:jid(), tuple(), tuple()) -> metrics_notify_return().
+-spec xmpp_stanza_dropped(mongoose_acc:t(), ejabberd:jid(), ejabberd:jid(), xmlel()) ->
+    metrics_notify_return().
 xmpp_stanza_dropped(Acc, #jid{server = Server} , _, _) ->
     mongoose_metrics:update(Server, xmppStanzaDropped, 1),
     Acc.

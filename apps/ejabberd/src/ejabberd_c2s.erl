@@ -1188,6 +1188,7 @@ convert_to_stanza(Acc) ->
 %%% incoming messages
 handle_incoming_message({send_text, Text}, StateName, StateData) ->
     ?ERROR_MSG("{c2s:send_text, Text}: ~p~n", [{send_text, Text}]), % is it ever called?
+    % it seems to be sometimes, by event sent from s2s
     send_text(StateData, Text),
     ejabberd_hooks:run(c2s_loop_debug, [Text]),
     fsm_next_state(StateName, StateData);
@@ -1617,6 +1618,7 @@ send_element(Acc, StateData) ->
     El = mongoose_acc:get(to_send, Acc),
     send_element(Acc, El,  StateData).
 
+-spec send_element(mongoose_acc:t(), xmlel(), state()) -> mongoose_acc:t() | ok.
 send_element(Acc, El,  #state{server = Server} = StateData) ->
     Acc1 = ejabberd_hooks:run_fold(xmpp_send_element, Server, Acc, [El]),
     % we might put send result into accumulator
@@ -2064,12 +2066,12 @@ check_privacy_and_route(Acc, FromRoute, StateData) ->
     case Res of
        deny ->
            Err = jlib:make_error_reply(Packet, ?ERR_NOT_ACCEPTABLE_CANCEL),
-           ejabberd_router:route(To, From, mongoose_acc:put(to_send, Err, Acc1));
+           ejabberd_router:route(To, From, Acc1, Err);
        block ->
            Err = jlib:make_error_reply(Packet, ?ERR_NOT_ACCEPTABLE_BLOCKED),
-           ejabberd_router:route(To, From, mongoose_acc:put(to_send, Err, Acc1));
+           ejabberd_router:route(To, From, Acc1, Err);
        allow ->
-           ejabberd_router:route(FromRoute, To, Acc1)
+           ejabberd_router:route(FromRoute, To, Acc1, Packet)
    end.
 
 
@@ -2155,8 +2157,7 @@ presence_broadcast_first(Acc0, From, StateData, Packet) ->
     Stanza = #xmlel{name = <<"presence">>,
         attrs = [{<<"type">>, <<"probe">>}]},
     Acc = gb_sets:fold(fun(JID, A) ->
-                           A1 = mongoose_acc:put(to_send, Stanza, A),
-                           ejabberd_router:route(From, jid:make(JID), A1)
+                           ejabberd_router:route(From, jid:make(JID), A, Stanza)
                        end,
                Acc0,
                StateData#state.pres_t),
@@ -2288,7 +2289,7 @@ process_privacy_iq(Acc0, To, StateData) ->
                 {error, Error} ->
                     IQ#iq{type = error, sub_el = [SubEl, Error]}
             end,
-    Acc3 = ejabberd_router:route(To, From, mongoose_acc:put(to_send, jlib:iq_to_xml(IQRes), Acc2)),
+    Acc3 = ejabberd_router:route(To, From, Acc2, jlib:iq_to_xml(IQRes)),
     {Acc3, NewStateData}.
 
 -spec process_privacy_iq(Acc :: mongoose_acc:t(),
@@ -2353,10 +2354,9 @@ check_privacy_and_route_or_ignore(StateData, From, To, Packet, Dir) ->
                                         Packet :: exml:element(),
                                         Dir :: in | out) -> any().
 check_privacy_and_route_or_ignore(Acc, StateData, From, To, Packet, Dir) ->
-    Acc1 = mongoose_acc:put(to_send, Packet, Acc),
-    {Acc2, Res} = privacy_check_packet(Acc1, To, Dir, StateData),
+    {Acc2, Res} = privacy_check_packet(Acc, To, Dir, StateData),
     case Res of
-        allow -> ejabberd_router:route(From, To, Acc2);
+        allow -> ejabberd_router:route(From, To, Acc2, Packet);
         _ -> Acc2
     end.
 
