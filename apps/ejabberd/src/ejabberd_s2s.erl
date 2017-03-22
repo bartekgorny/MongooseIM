@@ -479,9 +479,10 @@ parent_domains(<<$., Rest/binary>>, Acc) ->
 parent_domains(<<_, Rest/binary>>, Acc) ->
     parent_domains(Rest, Acc).
 
--spec send_element(pid(), mongoose_acc:t(), xmlel()) -> {'send_element', mongoose_acc:t()}.
-send_element(Pid, _Acc, El) ->
-    Pid ! {send_element, El}.
+-spec send_element(pid(), mongoose_acc:t(), xmlel()) ->
+    {'send_element', mongoose_acc:t(), xmlel()}.
+send_element(Pid, Acc, El) ->
+    Pid ! {send_element, Acc, El}.
 
 %%--------------------------------------------------------------------
 %% Function: domain_utf8_to_ascii(Domain) -> binary() | false

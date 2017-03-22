@@ -776,7 +776,7 @@ is_privacy_allow(From, To, Packet, PrivacyList) ->
       To :: ejabberd:jid(),
       Acc :: mongoose_acc:t().
 route_message(From, To, Acc) ->
-    Packet = mongoose_acc:get(element, Acc),
+    Packet = mongoose_acc:get(to_send, Acc),
     LUser = To#jid.luser,
     LServer = To#jid.lserver,
     PrioPid = get_user_present_pids(LUser, LServer),
@@ -820,7 +820,7 @@ route_message(From, To, Acc) ->
                             Err = jlib:make_error_reply(
                                     Packet, ?ERR_SERVICE_UNAVAILABLE),
                             A = mongoose_acc:put(to_send, Err, Acc),
-                            ejabberd_router:route(To, From, A)
+                            ejabberd_router:route(To, From, A, Err)
                     end
             end
     end.
