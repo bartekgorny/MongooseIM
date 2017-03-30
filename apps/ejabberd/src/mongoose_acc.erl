@@ -18,7 +18,7 @@
 -export([initialise/3, terminate/3, terminate/4, dump/1, to_binary/1]).
 -export([to_element/1]).
 -export_type([t/0]).
--export([from_element/3]).
+-export([from_element/3, from_element/4]).
 
 %% if it is defined as -opaque then dialyzer fails
 -type t() :: map().
@@ -109,6 +109,11 @@ from_element(El, From, To) ->
     Acc = from_element(El),
     M = #{from_jid => From, to_jid => To, from => jid:to_binary(From), to => jid:to_binary(To)},
     update(Acc, M).
+
+-spec from_element(xmlel(), ejabberd:jid(), ejabberd:jid(), binary()) -> t().
+from_element(El, From, To, Server) ->
+    Acc = from_element(El, From, To),
+    put(server, Server, Acc).
 
 -spec from_map(map()) -> t().
 from_map(M) ->

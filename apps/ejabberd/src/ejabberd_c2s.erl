@@ -810,7 +810,7 @@ do_open_session(El, JID, StateData) ->
     ?INFO_MSG("(~w) Opened session for ~s", [StateData#state.socket, jid:to_binary(JID)]),
     Res = jlib:make_result_iq_reply(El),
     Packet = {jid:to_bare(StateData#state.jid), StateData#state.jid, Res},
-    case send_and_maybe_buffer_stanza(Packet, StateData, wait_for_session_or_sm) of
+    case send_and_maybe_buffer_stanza(und, Packet, StateData, wait_for_session_or_sm) of
         {_, _, NStateData, _} ->
             do_open_session_common(JID, NStateData);
         {_, _, NStateData} -> % error, resume not possible
@@ -1218,8 +1218,10 @@ handle_incoming_message({broadcast, Acc}, StateName, StateData) ->
     handle_broadcast_result(Res, StateName, StateData);
 handle_incoming_message({route, From, To, Acc}, StateName, StateData) ->
     Acc1 = ejabberd_hooks:run_fold(c2s_loop_debug, Acc, [{route, From, To}]),
-    Name = mongoose_acc:get(name, Acc1),
-    process_incoming_stanza(Name, From, To, Acc1, StateName, StateData);
+    Acc2 = mongoose_acc:put(user, StateData#state.user, Acc1),
+    Acc3 = mongoose_acc:put(server, StateData#state.server, Acc2),
+    Name = mongoose_acc:get(name, Acc3),
+    process_incoming_stanza(Name, From, To, Acc3, StateName, StateData);
 handle_incoming_message({send_filtered, Feature, From, To, Packet}, StateName, StateData) ->
     % this is used by pubsub and should be rewritten when someone rewrites pubsub module
     Drop = ejabberd_hooks:run_fold(c2s_filter_packet, StateData#state.server,
@@ -1233,7 +1235,7 @@ handle_incoming_message({send_filtered, Feature, From, To, Packet}, StateName, S
             FinalPacket = jlib:replace_from_to(From, To, Packet),
             case privacy_check_packet(StateData, From, To, FinalPacket, in) of
                 allow ->
-                    send_and_maybe_buffer_stanza({From, To, FinalPacket}, StateData, StateName);
+                    send_and_maybe_buffer_stanza(und, {From, To, FinalPacket}, StateData, StateName);
                 _ ->
                     fsm_next_state(StateName, StateData)
             end;
@@ -1267,17 +1269,17 @@ process_incoming_stanza(Name, From, To, Acc, StateName, StateData) ->
     end.
 
 preprocess_and_ship(Acc, From, To, Packet, StateName, StateData) ->
+    % TODO: make it return accumulator
     #xmlel{attrs = Attrs} = Packet,
     Attrs2 = jlib:replace_from_to_attrs(jid:to_binary(From),
         jid:to_binary(To),
         Attrs),
     FixedPacket = Packet#xmlel{attrs = Attrs2},
-    _Acc2 = ejabberd_hooks:run_fold(user_receive_packet,
+    Acc2 = ejabberd_hooks:run_fold(user_receive_packet,
         StateData#state.server,
         Acc,
         [StateData#state.jid, From, To, FixedPacket]),
-    % should we push accumulator further, perhaps as far as send_element?
-    ship_to_local_user({From, To, FixedPacket}, StateData, StateName).
+    ship_to_local_user(Acc2, {From, To, FixedPacket}, StateData, StateName).
 
 response_negative(<<"iq">>, forbidden, From, To, Acc) ->
     send_back_error(?ERR_FORBIDDEN, From, To, Acc);
@@ -1625,6 +1627,21 @@ maybe_send_element_safe(State, El) ->
         _ -> error
     end.
 
+-spec maybe_send_element_safe(mongoose_acc:t(), El :: jlib:xmlel(), state()) -> {mongoose_acc:t(), ok | error}.
+maybe_send_element_safe(Acc, El, #state{stream_mgmt = false} = State) ->
+    send_element(Acc, El, State);
+maybe_send_element_safe(Acc, State, El) ->
+    case catch send_element(Acc, El, State) of
+        Res ->
+            case mongoose_acc:is_acc(Res) of
+                true -> {Res, ok};
+                false -> {Acc, error}
+            end
+    end.
+
+%% @doc This is the termination point - from here stanza is sent to the user
+%% We sent the original stanza ('element') unless there is a different thing
+% keyed 'to_send'
 -spec send_element(state(), xmlel()) -> any().
 send_element(#state{server = Server} = StateData, #xmlel{} = El) ->
     % used mostly in states other then session_established
@@ -1701,10 +1718,13 @@ send_trailer(StateData) ->
     send_text(StateData, ?STREAM_TRAILER).
 
 
-send_and_maybe_buffer_stanza({J1, J2, El}, State, StateName)->
-    % this is a very last stage, we already terminated accumulator
+send_and_maybe_buffer_stanza(OptAcc, {J1, J2, El}, State, StateName)->
+    Acc = case OptAcc of
+              und -> mongoose_acc:from_element(El, J1, J2, State#state.server);
+              _ -> OptAcc
+          end,
     % to be removed
-    {SendResult, BufferedStateData} =
+    {_NAcc, SendResult, BufferedStateData} =
         send_and_maybe_buffer_stanza({J1, J2, mod_amp:strip_amp_el_from_request(El)}, State),
     % if we have to check packet before sending we should do it much earlier, when it is
     % still accumulator
@@ -1727,10 +1747,10 @@ send_and_maybe_buffer_stanza({J1, J2, El}, State, StateName)->
 result_to_amp_event(ok) -> delivered;
 result_to_amp_event(_) -> delivery_failed.
 
-send_and_maybe_buffer_stanza({_, _, Stanza} = Packet, State) ->
-    SendResult = maybe_send_element_safe(State, Stanza),
+send_and_maybe_buffer_stanza(Acc, {_, _, Stanza} = Packet, State) ->
+    {NAcc, SendResult} = maybe_send_element_safe(Acc, State, Stanza),
     BufferedStateData = buffer_out_stanza(Packet, State),
-    {SendResult, BufferedStateData}.
+    {NAcc, SendResult, BufferedStateData}.
 
 -spec new_id() -> binary().
 new_id() ->
@@ -2107,9 +2127,8 @@ check_privacy_and_route(Acc, FromRoute, StateData) ->
                            Dir :: 'in' | 'out') -> allow|deny|block.
 privacy_check_packet(StateData, From, To, #xmlel{} = Packet, Dir) ->
     ?DEPRECATED, % but triggered by routed brodcast
-    Acc = mongoose_acc:from_element(Packet),
-    Acc1 = mongoose_acc:put(from_jid, From, Acc),
-    {_, Res} = privacy_check_packet(Acc1, To, Dir, StateData),
+    Acc = mongoose_acc:from_element(Packet, From, To, StateData#state.server),
+    {_, Res} = privacy_check_packet(Acc, To, Dir, StateData),
     Res.
 
 -spec privacy_check_packet(Acc :: mongoose_acc:t(),
@@ -2748,15 +2767,19 @@ resend_csi_buffer(State) ->
     fsm_next_state(session_established, NewState#state{csi_state=active}).
 
 ship_to_local_user(Packet, State, StateName) ->
-    % this is coming in, no rewrite yet
-    maybe_csi_inactive_optimisation(Packet, State, StateName).
+    {From, To, Stanza} = Packet,
+    Acc = mongoose_acc:from_element(Stanza, From, To, State#state.server),
+    maybe_csi_inactive_optimisation(Acc, Packet, State, StateName).
 
-maybe_csi_inactive_optimisation(Packet, #state{csi_state = active} = State,
+ship_to_local_user(Acc, Packet, State, StateName) ->
+    maybe_csi_inactive_optimisation(Acc, Packet, State, StateName).
+
+maybe_csi_inactive_optimisation(Acc, Packet, #state{csi_state = active} = State,
                                 StateName) ->
-    send_and_maybe_buffer_stanza(Packet, State, StateName);
-maybe_csi_inactive_optimisation(Packet, #state{csi_buffer = Buffer} = State,
+    send_and_maybe_buffer_stanza(Acc, Packet, State, StateName);
+maybe_csi_inactive_optimisation(Acc, Packet, #state{csi_buffer = Buffer} = State,
                                 StateName) ->
-    NewBuffer = [Packet | Buffer],
+    NewBuffer = [{Acc, Packet} | Buffer],
     NewState = flush_or_buffer_packets(State#state{csi_buffer = NewBuffer}),
     fsm_next_state(StateName, NewState).
 
@@ -2773,8 +2796,8 @@ flush_or_buffer_packets(State) ->
 -spec flush_csi_buffer(state()) -> state().
 flush_csi_buffer(#state{csi_buffer = BufferOut} = State) ->
     %%lists:foldr to preserve order
-    F = fun(Packet, {_, OldState}) ->
-                send_and_maybe_buffer_stanza(Packet, OldState)
+    F = fun({A, Packet}, {_, OldState}) ->
+                send_and_maybe_buffer_stanza(A, Packet, OldState)
         end,
     {_, NewState} = lists:foldr(F, {ok, State}, BufferOut),
     NewState#state{csi_buffer = []}.
