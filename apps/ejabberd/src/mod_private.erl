@@ -93,6 +93,7 @@ stop(Host) ->
 remove_user(Acc, User, Server) ->
     case remove_user(User, Server) of
         ok -> Acc;
+        {atomic, _} -> Acc;
         E -> E
     end.
 

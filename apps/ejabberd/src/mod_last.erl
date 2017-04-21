@@ -246,6 +246,7 @@ remove_user(Acc, User, Server) ->
     LServer = jid:nameprep(Server),
     case mod_last_backend:remove_user(LUser, LServer) of
         ok -> Acc;
+        {atomic, _} -> Acc;
         E -> E
     end.
 

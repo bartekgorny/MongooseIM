@@ -280,11 +280,14 @@ remove_user(Acc, User, Server) ->
             Acc
     end.
 
--spec add_rooms_to_roster(Acc :: [mod_roster:roster()], UserUS :: ejabberd:simple_bare_jid()) ->
-    [mod_roster:roster()].
+-spec add_rooms_to_roster(Acc :: mongoose_acc:t(), UserUS :: ejabberd:simple_bare_jid()) ->
+    mongoose_acc:t().
 add_rooms_to_roster(Acc, UserUS) ->
-    lists:foldl(
-      fun({{RoomU, RoomS}, RoomName, RoomVersion}, Acc0) ->
+    Items = mongoose_acc:get(roster, Acc, []),
+    RoomList = mod_muc_light_db_backend:get_user_rooms(UserUS, undefined),
+    Info = get_rooms_info(lists:sort(RoomList )),
+    NewItems = lists:foldl(
+      fun({{RoomU, RoomS}, RoomName, RoomVersion}, Items0) ->
               Item = #roster{
                         jid = jid:make_noprep(RoomU, RoomS, <<>>),
                         name = RoomName,
@@ -293,9 +296,9 @@ add_rooms_to_roster(Acc, UserUS) ->
                         xs = [#xmlel{ name = <<"version">>,
                                       children = [#xmlcdata{ content = RoomVersion }] }]
                        },
-              [Item | Acc0]
-      end, Acc, get_rooms_info(lists:sort(
-                                 mod_muc_light_db_backend:get_user_rooms(UserUS, undefined)))).
+              [Item | Items0]
+      end, Items, Info),
+    mongoose_acc:put(roster, NewItems, Acc).
 
 -spec process_iq_get(Acc :: mongoose_acc:t(), From :: ejabberd:jid(), To :: ejabberd:jid(),
                      IQ :: ejabberd:iq(), ActiveList :: binary()) ->

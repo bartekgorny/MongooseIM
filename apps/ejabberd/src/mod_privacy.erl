@@ -420,6 +420,7 @@ is_type_match(group, Value, _JID, _Subscription, Groups) ->
 remove_user(Acc, User, Server) ->
     case remove_user(User, Server) of
         ok -> Acc;
+        {atomic, _} -> Acc;
         E -> E
     end.
 
