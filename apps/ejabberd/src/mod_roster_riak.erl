@@ -20,14 +20,12 @@
          read_roster_version/2,
          write_roster_version/4,
          get_roster/2,
-         get_roster_by_jid_t/3,
          get_roster_entry/3,
          get_roster_entry/4,
          get_roster_entry_t/3,
          get_roster_entry_t/4,
          get_subscription_lists/3,
          roster_subscribe_t/4,
-         get_roster_by_jid_with_groups_t/3,
          remove_user/2,
          update_roster_t/4,
          del_roster_t/3,
@@ -76,23 +74,9 @@ get_roster_entry_t(_, _, _) ->
 get_roster_entry_t(_, _, _, full) ->
     does_not_exist.
 
-get_roster_by_jid_t(LUser, LServer, LJID) ->
-    case riakc_map:find({jid:to_binary(LJID), register}, get_t_roster(LUser, LServer)) of
-        {ok, ItemReg} ->
-            UnpackedItem = unpack_item(ItemReg),
-            UnpackedItem#roster{ jid = LJID, name = <<>>, groups = [], xs = [] };
-        error ->
-            #roster{usj = {LUser, LServer, LJID}, us = {LUser, LServer}, jid = LJID}
-    end.
 
 roster_subscribe_t(LUser, LServer, LJID, Item) ->
     set_t_roster(LUser, LServer, LJID, Item).
-
-get_roster_by_jid_with_groups_t(LUser, LServer, LJID) ->
-    case riakc_map:find({jid:to_binary(LJID), register}, get_t_roster(LUser, LServer)) of
-        {ok, ItemReg} -> unpack_item(ItemReg);
-        error -> #roster{usj = {LUser, LServer, LJID}, us = {LUser, LServer}, jid = LJID}
-    end.
 
 update_roster_t(LUser, LServer, LJID, Item) ->
     set_t_roster(LUser, LServer, LJID, Item).

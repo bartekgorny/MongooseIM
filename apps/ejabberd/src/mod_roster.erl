@@ -100,11 +100,6 @@
     LUser :: ejabberd:luser(),
     LServer :: ejabberd:lserver(),
     Result :: [roster()].
--callback get_roster_by_jid_t(LUser, LServer, LJid) -> Result when % DEPRECATED
-    LUser :: ejabberd:luser(),
-    LServer :: ejabberd:lserver(),
-    LJid :: ejabberd:simple_jid(),
-    Result :: term().
 -callback get_subscription_lists(Acc, LUser, LServer) -> Result when
     Acc :: term(),
     LUser :: ejabberd:luser(),
@@ -115,11 +110,6 @@
     LServer :: ejabberd:lserver(),
     LJid :: ejabberd:simple_jid(),
     SJid :: roster(),
-    Result :: term().
--callback get_roster_by_jid_with_groups_t(LUser, LServer, LJid) -> Result when % DEPRECATED
-    LUser :: ejabberd:luser(),
-    LServer :: ejabberd:lserver(),
-    LJid :: ejabberd:simple_jid(),
     Result :: term().
 -callback remove_user(LUser, LServer) -> Result when
     LUser :: ejabberd:luser(),
@@ -168,10 +158,8 @@ start(Host, Opts) ->
     TrackedFuns = [read_roster_version,
                    write_roster_version,
                    get_roster,
-                   get_roster_by_jid_t,
                    get_subscription_lists,
                    roster_subscribe_t,
-                   get_roster_by_jid_with_groups_t,
                    update_roster_t,
                    del_roster_t,
                    read_subscription_and_groups
@@ -619,9 +607,6 @@ out_subscription(Acc, User, Server, JID, Type) ->
     process_subscription(out, User, Server, JID, Type, <<"">>),
     Acc.
 
-get_roster_by_jid_with_groups_t(LUser, LServer, LJID) ->
-    mod_roster_backend:get_roster_by_jid_with_groups_t(LUser, LServer, LJID).
-
 process_subscription(Direction, User, Server, JID1, Type, Reason) ->
     LUser = jid:nodeprep(User),
     LServer = jid:nameprep(Server),
@@ -653,7 +638,12 @@ autoreply_to_type(subscribed) -> <<"subscribed">>;
 autoreply_to_type(unsubscribed) -> <<"unsubscribed">>.
 
 process_subscription_transaction(Direction, LUser, LServer, LJID, Type, Reason) ->
-    Item = get_roster_by_jid_with_groups_t(LUser, LServer, LJID),
+    Item = case mod_roster_backend:get_roster_entry_t(LUser, LServer, LJID, full) of
+               does_not_exist ->
+                   #roster{usj = {LUser, LServer, LJID},
+                       us = {LUser, LServer}, jid = LJID};
+               R -> R
+           end,
     NewState = case Direction of
                    out ->
                        out_state_change(Item#roster.subscription,

@@ -25,10 +25,8 @@
          get_roster_entry/4,
          get_roster_entry_t/3,
          get_roster_entry_t/4,
-         get_roster_by_jid_t/3,
          get_subscription_lists/3,
          roster_subscribe_t/4,
-         get_roster_by_jid_with_groups_t/3,
          update_roster_t/4,
          remove_user/2,
          del_roster_t/3
@@ -145,29 +143,6 @@ get_roster_entry_t(LUser, LServer, LJID) ->
 get_roster_entry_t(LUser, LServer, LJID, full) ->
     get_roster_entry(LUser, LServer, LJID, full).
 
-get_roster_by_jid_t(LUser, LServer, LJID) ->
-    Username = mongoose_rdbms:escape(LUser),
-    SJID = mongoose_rdbms:escape(jid:to_binary(LJID)),
-    {selected,
-     Res} =
-    rdbms_queries:get_roster_by_jid(LServer, Username, SJID),
-    case Res of
-        [] ->
-            #roster{usj = {LUser, LServer, LJID},
-                    us = {LUser, LServer}, jid = LJID};
-        [I] ->
-            R = raw_to_record(LServer, I),
-            case R of
-                %% Bad JID in database:
-                error ->
-                    #roster{usj = {LUser, LServer, LJID},
-                            us = {LUser, LServer}, jid = LJID};
-                _ ->
-                    R#roster{usj = {LUser, LServer, LJID},
-                             us = {LUser, LServer}, jid = LJID, name = <<"">>}
-            end
-    end.
-
 get_subscription_lists(_, LUser, LServer) ->
     Username = mongoose_rdbms:escape(LUser),
     case catch rdbms_queries:get_roster(LServer, Username) of
@@ -184,29 +159,6 @@ roster_subscribe_t(LUser, LServer, LJID, Item) ->
     SJID = mongoose_rdbms:escape(jid:to_binary(LJID)),
     rdbms_queries:roster_subscribe(LServer, Username, SJID,
                                   ItemVals).
-
-get_roster_by_jid_with_groups_t(LUser, LServer, LJID) ->
-    Username = mongoose_rdbms:escape(LUser),
-    SJID = mongoose_rdbms:escape(jid:to_binary(LJID)),
-    case rdbms_queries:get_roster_by_jid(LServer, Username,
-                                        SJID)
-    of
-        {selected,
-         [I]} ->
-            R = raw_to_record(LServer, I),
-            Groups = case rdbms_queries:get_roster_groups(LServer,
-                                                         Username, SJID)
-                     of
-                         {selected, JGrps} when is_list(JGrps) ->
-                             [JGrp || {JGrp} <- JGrps];
-                         _ -> []
-                     end,
-            R#roster{groups = Groups};
-        {selected,
-         []} ->
-            #roster{usj = {LUser, LServer, LJID},
-                    us = {LUser, LServer}, jid = LJID}
-    end.
 
 remove_user(LUser, LServer) ->
     Username = mongoose_rdbms:escape(LUser),
