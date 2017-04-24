@@ -23,6 +23,8 @@
          get_roster_by_jid_t/3,
          get_roster_entry/3,
          get_roster_entry/4,
+         get_roster_entry_t/3,
+         get_roster_entry_t/4,
          get_subscription_lists/3,
          roster_subscribe_t/4,
          get_roster_by_jid_with_groups_t/3,
@@ -66,7 +68,13 @@ get_roster_entry(_, _, _) ->
     does_not_exist. % what is "transaction" here?
 
 get_roster_entry(_, _, _, full) ->
-    does_not_exist. % what is "transaction" here?
+    does_not_exist.
+
+get_roster_entry_t(_, _, _) ->
+    does_not_exist.
+
+get_roster_entry_t(_, _, _, full) ->
+    does_not_exist.
 
 get_roster_by_jid_t(LUser, LServer, LJID) ->
     case riakc_map:find({jid:to_binary(LJID), register}, get_t_roster(LUser, LServer)) of

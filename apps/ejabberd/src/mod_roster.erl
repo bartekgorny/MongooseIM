@@ -49,8 +49,8 @@
          %get_roster/2,
          get_roster_entry/3,
          get_roster_entry/4,
-%%         get_roster_entry_t/3,
-%%         get_roster_entry_t/4,
+         get_roster_entry_t/3,
+         get_roster_entry_t/4,
          in_subscription/6,
          out_subscription/5,
          set_items/3,
@@ -146,16 +146,16 @@
     LServer :: ejabberd:lserver(),
     Jid :: ejabberd:simple_jid() | ljid() | jid(),
     Result :: roster() | does_not_exist | error.
-%%-callback get_roster_entry_t(LUser, LServer, Jid) -> Result when
-%%    LUser :: ejabberd:luser(),
-%%    LServer :: ejabberd:lserver(),
-%%    Jid :: ejabberd:simple_jid() | ljid() | jid(),
-%%    Result :: roster() | does_not_exist | error.
-%%-callback get_roster_entry_t(LUser, LServer, Jid, full) -> Result when
-%%    LUser :: ejabberd:luser(),
-%%    LServer :: ejabberd:lserver(),
-%%    Jid :: ejabberd:simple_jid() | ljid() | jid(),
-%%    Result :: roster() | does_not_exist | error.
+-callback get_roster_entry_t(LUser, LServer, Jid) -> Result when
+    LUser :: ejabberd:luser(),
+    LServer :: ejabberd:lserver(),
+    Jid :: ejabberd:simple_jid() | ljid() | jid(),
+    Result :: roster() | does_not_exist | error.
+-callback get_roster_entry_t(LUser, LServer, Jid, full) -> Result when
+    LUser :: ejabberd:luser(),
+    LServer :: ejabberd:lserver(),
+    Jid :: ejabberd:simple_jid() | ljid() | jid(),
+    Result :: roster() | does_not_exist | error.
 
 -callback raw_to_record(LServer, Item) -> Result when
     LServer :: ejabberd:lserver(),
@@ -222,6 +222,12 @@ get_roster_entry(LUser, LServer, Jid) ->
 
 get_roster_entry(LUser, LServer, Jid, full) ->
     mod_roster_backend:get_roster_entry(LUser, LServer, jid_arg_to_lower(Jid), full).
+
+get_roster_entry_t(LUser, LServer, Jid) ->
+    mod_roster_backend:get_roster_entry_t(LUser, LServer, jid_arg_to_lower(Jid)).
+
+get_roster_entry_t(LUser, LServer, Jid, full) ->
+    mod_roster_backend:get_roster_entry_t(LUser, LServer, jid_arg_to_lower(Jid), full).
 
 jid_arg_to_lower(Jid) when is_binary(Jid) ->
     RJid = jid:from_binary(Jid),
@@ -410,9 +416,6 @@ item_to_xml(Item) ->
     #xmlel{name = <<"item">>, attrs = Attrs4,
            children = SubEls}.
 
-get_roster_by_jid_t(LUser, LServer, LJID) ->
-    mod_roster_backend:get_roster_by_jid_t(LUser, LServer, LJID).
-
 process_iq_set(#jid{lserver = LServer} = From, To, #iq{sub_el = SubEl} = IQ) ->
     #xmlel{children = Els} = SubEl,
     ejabberd_hooks:run(roster_set, LServer, [From, To, SubEl]),
@@ -431,16 +434,13 @@ do_process_item_set(JID1,
                     #xmlel{attrs = Attrs, children = Els}) ->
     LJID = jid:to_lower(JID1),
     F = fun () ->
-                Item = get_roster_by_jid_t(LUser, LServer, LJID),
-%%                ItemB = case mod_roster_backend:get_roster_entry_t(LUser, LServer, LJID) of
-%%                           does_not_exist ->
-%%                               #roster{usj = {LUser, LServer, LJID},
-%%                                       us = {LUser, LServer},
-%%                                       jid = LJID};
-%%                           I -> I
-%%                       end,
-%%        ?ERROR_MSG("Item:~n~p~n~n", [Item]),
-%%        ?ERROR_MSG("ItemB:~n~p~n~n", [ItemB]),
+                Item = case mod_roster_backend:get_roster_entry_t(LUser, LServer, LJID) of
+                           does_not_exist ->
+                               #roster{usj = {LUser, LServer, LJID},
+                                       us = {LUser, LServer},
+                                       jid = LJID};
+                           I -> I
+                       end,
                 Item1 = process_item_attrs(Item, Attrs),
                 Item2 = process_item_els(Item1, Els),
                 case Item2#roster.subscription of

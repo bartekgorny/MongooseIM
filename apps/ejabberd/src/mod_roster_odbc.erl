@@ -23,6 +23,8 @@
          get_roster/2,
          get_roster_entry/3,
          get_roster_entry/4,
+         get_roster_entry_t/3,
+         get_roster_entry_t/4,
          get_roster_by_jid_t/3,
          get_subscription_lists/3,
          roster_subscribe_t/4,
@@ -136,6 +138,12 @@ get_roster_entry(LUser, LServer, LJID, full) ->
         {Subscription, Groups} ->
             Rentry#roster{subscription = Subscription, groups = Groups}
     end.
+
+get_roster_entry_t(LUser, LServer, LJID) ->
+    get_roster_entry(LUser, LServer, LJID).
+
+get_roster_entry_t(LUser, LServer, LJID, full) ->
+    get_roster_entry(LUser, LServer, LJID, full).
 
 get_roster_by_jid_t(LUser, LServer, LJID) ->
     Username = mongoose_rdbms:escape(LUser),
