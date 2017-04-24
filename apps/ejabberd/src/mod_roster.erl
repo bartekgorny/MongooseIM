@@ -46,7 +46,6 @@
          process_local_iq/3,
          get_user_roster/2,
          get_subscription_lists/3,
-         %get_roster/2,
          get_roster_entry/3,
          get_roster_entry/4,
          get_roster_entry_t/3,
@@ -61,7 +60,6 @@
          get_versioning_feature/2,
          roster_versioning_enabled/1,
          roster_version/2
-         %send_unsubscription_to_rosteritems/3]). % and this one too
          ]).
 
 -export([remove_test_user/2, transaction/2, process_subscription_transaction/6]). % for testing
@@ -158,6 +156,8 @@ start(Host, Opts) ->
     TrackedFuns = [read_roster_version,
                    write_roster_version,
                    get_roster,
+                   get_roster_entry,
+                   get_roster_entry_t,
                    get_subscription_lists,
                    roster_subscribe_t,
                    update_roster_t,
