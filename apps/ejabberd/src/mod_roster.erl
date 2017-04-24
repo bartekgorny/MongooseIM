@@ -47,6 +47,8 @@
          get_user_roster/2,
          get_subscription_lists/3,
          %get_roster/2,
+         get_roster_entry/3,
+         get_roster_entry/4,
          in_subscription/6,
          out_subscription/5,
          set_items/3,
@@ -133,16 +135,16 @@
     LServer :: ejabberd:lserver(),
     LJid :: ejabberd:simple_jid(),
     Result :: term().
-%%-callback get_roster_entry(LUser, LServer, LJid) -> Result when
-%%    LUser :: ejabberd:luser(),
-%%    LServer :: ejabberd:lserver(),
-%%    LJid :: ejabberd:simple_jid(),
-%%    Result :: roster() | does_not_exist | error.
-%%-callback get_roster_entry(LUser, LServer, LJid, full) -> Result when
-%%    LUser :: ejabberd:luser(),
-%%    LServer :: ejabberd:lserver(),
-%%    LJid :: ejabberd:simple_jid(),
-%%    Result :: roster() | does_not_exist | error.
+-callback get_roster_entry(LUser, LServer, Jid) -> Result when
+    LUser :: ejabberd:luser(),
+    LServer :: ejabberd:lserver(),
+    Jid :: ejabberd:simple_jid() | ljid() | jid(),
+    Result :: roster() | does_not_exist | error.
+-callback get_roster_entry(LUser, LServer, Jid, full) -> Result when
+    LUser :: ejabberd:luser(),
+    LServer :: ejabberd:lserver(),
+    Jid :: ejabberd:simple_jid() | ljid() | jid(),
+    Result :: roster() | does_not_exist | error.
 %%-callback get_roster_entry_t(LUser, LServer, LJid) -> Result when
 %%    LUser :: ejabberd:luser(),
 %%    LServer :: ejabberd:lserver(),
@@ -213,6 +215,18 @@ stop(Host) ->
     ejabberd_hooks:delete(roster_get_versioning_feature, Host,
                           ?MODULE, get_versioning_feature, 50),
     gen_iq_handler:remove_iq_handler(ejabberd_sm, Host, ?NS_ROSTER).
+
+get_roster_entry(LUser, LServer, Jid) ->
+    mod_roster_backend:get_roster_entry(LUser, LServer, jid_arg_to_lower(Jid)).
+
+get_roster_entry(LUser, LServer, Jid, full) ->
+    mod_roster_backend:get_roster_entry(LUser, LServer, jid_arg_to_lower(Jid), full).
+
+jid_arg_to_lower(Jid) when is_binary(Jid) ->
+    RJid = jid:from_binary(Jid),
+    jid:to_lower(RJid);
+jid_arg_to_lower(Jid) ->
+    jid:to_lower(Jid).
 
 process_iq(From, To, IQ) ->
     #iq{sub_el = SubEl} = IQ,
