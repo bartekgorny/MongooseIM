@@ -29,8 +29,8 @@
          get_roster_by_jid_with_groups_t/3,
          update_roster_t/4,
          remove_user/2,
-         del_roster_t/3,
-         read_subscription_and_groups/3]).
+         del_roster_t/3
+         ]).
 
 -export([raw_to_record/2]).
 

@@ -28,8 +28,8 @@
          get_roster_by_jid_with_groups_t/3,
          remove_user/2,
          update_roster_t/4,
-         del_roster_t/3,
-         read_subscription_and_groups/3]).
+         del_roster_t/3
+         ]).
 
 -export([raw_to_record/2]).
 
@@ -143,16 +143,6 @@ update_roster_t(_LUser, _LServer, _LJID, Item) ->
 del_roster_t(LUser, LServer, LJID) ->
     mnesia:delete({roster, {LUser, LServer, LJID}}).
 
-
-read_subscription_and_groups(LUser, LServer, LJID) ->
-    case catch mnesia:dirty_read(roster,
-                                 {LUser, LServer, LJID})
-    of
-        [#roster{subscription = Subscription,
-                 groups = Groups}] ->
-            {Subscription, Groups};
-        _ -> error
-    end.
 
 raw_to_record(_, Item) -> Item.
 

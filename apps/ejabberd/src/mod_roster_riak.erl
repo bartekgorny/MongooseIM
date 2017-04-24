@@ -29,7 +29,6 @@
          remove_user/2,
          update_roster_t/4,
          del_roster_t/3,
-         read_subscription_and_groups/3,
          raw_to_record/2]).
 
 -define(ROSTER_BUCKET(LServer), {<<"rosters">>, LServer}).
@@ -131,16 +130,16 @@ remove_user(LUser, LServer) ->
     mongoose_riak:delete(?ROSTER_BUCKET(LServer), LUser),
     {atomic, ok}.
 
-read_subscription_and_groups(LUser, LServer, LJID) ->
-    try
-        {ok, RosterMap} = mongoose_riak:fetch_type(?ROSTER_BUCKET(LServer), LUser),
-        ItemReg = riakc_map:fetch({jid:to_binary(LJID), register}, RosterMap),
-        #roster{ subscription = Subscription, groups = Groups } = unpack_item(ItemReg),
-        {Subscription, Groups}
-    catch
-        _:_ ->
-            error
-    end.
+%%read_subscription_and_groups(LUser, LServer, LJID) ->
+%%    try
+%%        {ok, RosterMap} = mongoose_riak:fetch_type(?ROSTER_BUCKET(LServer), LUser),
+%%        ItemReg = riakc_map:fetch({jid:to_binary(LJID), register}, RosterMap),
+%%        #roster{ subscription = Subscription, groups = Groups } = unpack_item(ItemReg),
+%%        {Subscription, Groups}
+%%    catch
+%%        _:_ ->
+%%            error
+%%    end.
 
 raw_to_record(_, Item) -> Item.
 
