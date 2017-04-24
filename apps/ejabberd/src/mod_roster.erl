@@ -904,18 +904,31 @@ read_subscription_and_groups(User, Server, LJID) ->
     mod_roster_backend:read_subscription_and_groups(LUser, LServer, LJID).
 
 get_jid_info(_, User, Server, JID) ->
-    LJID = jid:to_lower(JID),
-    case read_subscription_and_groups(User, Server, LJID) of
-        {Subscription, Groups} ->
-            {Subscription, Groups};
-        error ->
-            get_bare_jid_info(User, Server, LJID)
+    case get_roster_entry(User, Server, JID, full) of
+        error -> {none, []};
+        does_not_exist ->
+            LRJID = jid:to_bare(jid:to_lower(JID)),
+            case get_roster_entry(User, Server, LRJID) of
+                error -> {none, []};
+                does_not_exist -> {none, []};
+                R -> {R#roster.subscription, R#roster.groups}
+            end;
+        Re -> {Re#roster.subscription, Re#roster.groups}
     end.
+%%    ?ERROR_MSG("GRE:~n~p~n~n", [get_roster_entry(User, Server, JID, full)]),
+%%    ?ERROR_MSG("RSG:~n~p~n~n", [read_subscription_and_groups(User, Server, LJID)]),
+%%    case read_subscription_and_groups(User, Server, LJID) of
+%%        {Subscription, Groups} ->
+%%            {Subscription, Groups};
+%%        error ->
+%%            get_bare_jid_info(User, Server, LJID)
+%%    end.
 
 get_bare_jid_info(_User, _Server, {_, _, <<>>}) ->
     {none, []};
 get_bare_jid_info(User, Server, LJID) ->
     LRJID = jid:to_bare(LJID),
+    ?ERROR_MSG("GBJI:~n~p~n~n", [read_subscription_and_groups(User, Server, LRJID)]),
     case read_subscription_and_groups(User, Server, LRJID) of
         {Subscription, Groups} -> {Subscription, Groups};
         error -> {none, []}
