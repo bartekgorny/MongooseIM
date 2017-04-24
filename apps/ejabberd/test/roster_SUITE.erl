@@ -52,7 +52,14 @@ init_per_testcase(_TC, C) ->
 end_per_testcase(_TC, C) ->
     mod_roster:remove_user(<<"alice">>, host()),
     gen_mod:stop_module(host(), mod_roster),
+    meck:unload(gen_iq_handler),
     C.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%% TESTS %%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 
 roster_old(_C) ->
     R1 = get_roster(),
@@ -74,6 +81,11 @@ roster_old_with_filter(_C) ->
     R3 = get_full_roster(),
     ?assertEqual(1, length(R3)),
     ok.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%% HELPERS %%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 
 subscription(Direction, Type) ->
     LBob = jid:to_lower(jid:from_binary(bob())),
