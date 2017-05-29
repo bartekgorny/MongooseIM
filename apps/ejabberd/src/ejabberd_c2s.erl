@@ -810,7 +810,7 @@ do_open_session(El, JID, StateData) ->
     ?INFO_MSG("(~w) Opened session for ~s", [StateData#state.socket, jid:to_binary(JID)]),
     Res = jlib:make_result_iq_reply(El),
     Packet = {jid:to_bare(StateData#state.jid), StateData#state.jid, Res},
-    case send_and_maybe_buffer_stanza(undefined, Packet, StateData, wait_for_session_or_sm) of
+    case send_and_maybe_buffer_stanza(Packet, StateData, wait_for_session_or_sm) of
         {_, _, NStateData, _} ->
             do_open_session_common(JID, NStateData);
         {_, _, NStateData} -> % error, resume not possible
@@ -1224,7 +1224,8 @@ handle_incoming_message({route, From, To, Acc}, StateName, StateData) ->
     Acc2 = mongoose_acc:put(user, StateData#state.user, Acc1),
     Acc3 = mongoose_acc:put(server, StateData#state.server, Acc2),
     Name = mongoose_acc:get(name, Acc3),
-    process_incoming_stanza(Name, From, To, Acc3, StateName, StateData);
+    {NAcc, NState} = process_incoming_stanza(Name, From, To, Acc3, StateName, StateData),
+    NState;
 handle_incoming_message({send_filtered, Feature, From, To, Packet}, StateName, StateData) ->
     % this is used by pubsub and should be rewritten when someone rewrites pubsub module
     Drop = ejabberd_hooks:run_fold(c2s_filter_packet, StateData#state.server,
@@ -1238,7 +1239,7 @@ handle_incoming_message({send_filtered, Feature, From, To, Packet}, StateName, S
             FinalPacket = jlib:replace_from_to(From, To, Packet),
             case privacy_check_packet(StateData, From, To, FinalPacket, in) of
                 allow ->
-                    send_and_maybe_buffer_stanza(undefined, {From, To, FinalPacket}, StateData, StateName);
+                    send_and_maybe_buffer_stanza({From, To, FinalPacket}, StateData, StateName);
                 _ ->
                     fsm_next_state(StateName, StateData)
             end;
@@ -1722,18 +1723,20 @@ send_trailer(StateData) when StateData#state.xml_socket ->
 send_trailer(StateData) ->
     send_text(StateData, ?STREAM_TRAILER).
 
-send_and_maybe_buffer_stanza(OptAcc, {J1, J2, El}, State, StateName)->
-    Acc = case OptAcc of
-              undefined -> mongoose_acc:from_element(El, J1, J2, State#state.server);
-              _ -> OptAcc
-          end,
-    % to be removed
-    {_NAcc, SendResult, BufferedStateData} =
-        send_and_maybe_buffer_stanza(Acc, {J1, J2, mod_amp:strip_amp_el_from_request(El)}, State),
+send_and_maybe_buffer_stanza({J1, J2, El}, State, StateName)->
+    % a simplified form for calls which do not use accumulator
+    % and do not expect it in return
+    Acc = mongoose_acc:from_element(El, J1, J2, State#state.server),
+    {_, NState} = send_and_maybe_buffer_acc(Acc, {J1, J2, El}, State, StateName),
+    NState.
+
+send_and_maybe_buffer_acc(Acc, {J1, J2, El}, State, StateName)->
+    {NAcc, SendResult, BufferedStateData} =
+        send_and_maybe_buffer_acc(Acc, {J1, J2, mod_amp:strip_amp_el_from_request(El)}, State),
     % if we have to check packet before sending we should do it much earlier, when it is
     % still accumulator
     mod_amp:check_packet(El, result_to_amp_event(SendResult)),
-    case SendResult of
+    NState = case SendResult of
         ok ->
             case catch maybe_send_ack_request(BufferedStateData) of
                 R when is_boolean(R) ->
@@ -1746,12 +1749,13 @@ send_and_maybe_buffer_stanza(OptAcc, {J1, J2, El}, State, StateName)->
         _ ->
             ?DEBUG("Send element error: ~p, try enter resume session", [SendResult]),
             maybe_enter_resume_session(BufferedStateData#state.stream_mgmt_id, BufferedStateData)
-    end.
+    end,
+    {NAcc, NState}.
 
 result_to_amp_event(ok) -> delivered;
 result_to_amp_event(_) -> delivery_failed.
 
-send_and_maybe_buffer_stanza(Acc, {_, _, Stanza} = Packet, State) ->
+send_and_maybe_buffer_acc(Acc, {_, _, Stanza} = Packet, State) ->
     {NAcc, SendResult} = maybe_send_element_safe(Acc, State, Stanza),
     BufferedStateData = buffer_out_stanza(Packet, State),
     {NAcc, SendResult, BufferedStateData}.
@@ -2780,7 +2784,7 @@ ship_to_local_user(Acc, Packet, State, StateName) ->
 
 maybe_csi_inactive_optimisation(Acc, Packet, #state{csi_state = active} = State,
                                 StateName) ->
-    send_and_maybe_buffer_stanza(Acc, Packet, State, StateName);
+    send_and_maybe_buffer_acc(Acc, Packet, State, StateName);
 maybe_csi_inactive_optimisation(Acc, Packet, #state{csi_buffer = Buffer} = State,
                                 StateName) ->
     NewBuffer = [{Acc, Packet} | Buffer],
@@ -2800,10 +2804,10 @@ flush_or_buffer_packets(State) ->
 -spec flush_csi_buffer(state()) -> state().
 flush_csi_buffer(#state{csi_buffer = BufferOut} = State) ->
     %%lists:foldr to preserve order
-    F = fun({A, Packet}, {_, OldState}) ->
-                send_and_maybe_buffer_stanza(A, Packet, OldState)
+    F = fun({A, Packet}, {_, _, OldState}) ->
+                send_and_maybe_buffer_acc(A, Packet, OldState)
         end,
-    {_, NewState} = lists:foldr(F, {ok, State}, BufferOut),
+    {_, _, NewState} = lists:foldr(F, {none, ok, State}, BufferOut),
     NewState#state{csi_buffer = []}.
 
 bounce_csi_buffer(#state{csi_buffer = []}) ->
