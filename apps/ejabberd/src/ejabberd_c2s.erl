@@ -1225,6 +1225,7 @@ handle_incoming_message({route, From, To, Acc}, StateName, StateData) ->
     Acc3 = mongoose_acc:put(server, StateData#state.server, Acc2),
     Name = mongoose_acc:get(name, Acc3),
     {NAcc, NState} = process_incoming_stanza(Name, From, To, Acc3, StateName, StateData),
+    ?ERROR_MSG("Send result: ~p", [mongoose_acc:get(send_result, NAcc, unknown)]),
     NState;
 handle_incoming_message({send_filtered, Feature, From, To, Packet}, StateName, StateData) ->
     % this is used by pubsub and should be rewritten when someone rewrites pubsub module
@@ -1270,7 +1271,7 @@ process_incoming_stanza(Name, From, To, Acc, StateName, StateData) ->
             preprocess_and_ship(NewAcc, From, To, Packet, StateName, NewState);
         {Reason, NewAcc, NewState} ->
             response_negative(Name, Reason, From, To, NewAcc),
-            fsm_next_state(StateName, NewState)
+            {NewAcc, fsm_next_state(StateName, NewState)}
     end.
 
 preprocess_and_ship(Acc, From, To, Packet, StateName, StateData) ->
@@ -2788,17 +2789,17 @@ maybe_csi_inactive_optimisation(Acc, Packet, #state{csi_state = active} = State,
 maybe_csi_inactive_optimisation(Acc, Packet, #state{csi_buffer = Buffer} = State,
                                 StateName) ->
     NewBuffer = [{Acc, Packet} | Buffer],
-    NewState = flush_or_buffer_packets(State#state{csi_buffer = NewBuffer}),
-    fsm_next_state(StateName, NewState).
+    {NewAcc, NewState} = flush_or_buffer_packets(Acc, State#state{csi_buffer = NewBuffer}),
+    {NewAcc, fsm_next_state(StateName, NewState)}.
 
-flush_or_buffer_packets(State) ->
+flush_or_buffer_packets(Acc, State) ->
     MaxBuffSize = gen_mod:get_module_opt(State#state.server, mod_csi,
                                          buffer_max, 20),
     case length(State#state.csi_buffer) > MaxBuffSize of
         true ->
-            flush_csi_buffer(State);
+            {mongoose_acc:put(send_result, flushed, Acc), flush_csi_buffer(State)};
         _ ->
-            State
+            {mongoose_acc:put(send_result, buffered, Acc),State}
     end.
 
 -spec flush_csi_buffer(state()) -> state().
