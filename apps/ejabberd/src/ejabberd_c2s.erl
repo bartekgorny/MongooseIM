@@ -810,7 +810,7 @@ do_open_session(El, JID, StateData) ->
     ?INFO_MSG("(~w) Opened session for ~s", [StateData#state.socket, jid:to_binary(JID)]),
     Res = jlib:make_result_iq_reply(El),
     Packet = {jid:to_bare(StateData#state.jid), StateData#state.jid, Res},
-    case send_and_maybe_buffer_stanza(und, Packet, StateData, wait_for_session_or_sm) of
+    case send_and_maybe_buffer_stanza(undefined, Packet, StateData, wait_for_session_or_sm) of
         {_, _, NStateData, _} ->
             do_open_session_common(JID, NStateData);
         {_, _, NStateData} -> % error, resume not possible
@@ -1217,6 +1217,9 @@ handle_incoming_message({broadcast, Acc}, StateName, StateData) ->
     Res = handle_routed_broadcast(Broadcast, StateData),
     handle_broadcast_result(Res, StateName, StateData);
 handle_incoming_message({route, From, To, Acc}, StateName, StateData) ->
+    % the most important - we receive a barebones accumulator from the other c2s (or from s2s)
+    % and from here we proceed
+    % we have to replace user and server, since they now refer to the receipient
     Acc1 = ejabberd_hooks:run_fold(c2s_loop_debug, Acc, [{route, From, To}]),
     Acc2 = mongoose_acc:put(user, StateData#state.user, Acc1),
     Acc3 = mongoose_acc:put(server, StateData#state.server, Acc2),
@@ -1235,7 +1238,7 @@ handle_incoming_message({send_filtered, Feature, From, To, Packet}, StateName, S
             FinalPacket = jlib:replace_from_to(From, To, Packet),
             case privacy_check_packet(StateData, From, To, FinalPacket, in) of
                 allow ->
-                    send_and_maybe_buffer_stanza(und, {From, To, FinalPacket}, StateData, StateName);
+                    send_and_maybe_buffer_stanza(undefined, {From, To, FinalPacket}, StateData, StateName);
                 _ ->
                     fsm_next_state(StateName, StateData)
             end;
@@ -1246,9 +1249,10 @@ handle_incoming_message({send_filtered, Feature, From, To, Packet}, StateName, S
     end;
 handle_incoming_message({broadcast, Type, From, Packet}, StateName, StateData) ->
     %% this version is used only by mod_pubsub, which does things the old way
-    Recipients = ejabberd_hooks:run_fold(
-        c2s_broadcast_recipients, StateData#state.server,
-        [], [StateData#state.server, StateData, Type, From, Packet]),
+    Recipients = ejabberd_hooks:run_fold(c2s_broadcast_recipients,
+                                         StateData#state.server,
+                                         [],
+                                         [StateData#state.server, StateData, Type, From, Packet]),
     lists:foreach(fun(USR) -> ejabberd_router:route(From, jid:make(USR), Packet) end,
         lists:usort(Recipients)),
     fsm_next_state(StateName, StateData);
@@ -1272,13 +1276,13 @@ preprocess_and_ship(Acc, From, To, Packet, StateName, StateData) ->
     % TODO: make it return accumulator
     #xmlel{attrs = Attrs} = Packet,
     Attrs2 = jlib:replace_from_to_attrs(jid:to_binary(From),
-        jid:to_binary(To),
-        Attrs),
+                                        jid:to_binary(To),
+                                        Attrs),
     FixedPacket = Packet#xmlel{attrs = Attrs2},
     Acc2 = ejabberd_hooks:run_fold(user_receive_packet,
-        StateData#state.server,
-        Acc,
-        [StateData#state.jid, From, To, FixedPacket]),
+                                   StateData#state.server,
+                                   Acc,
+                                   [StateData#state.jid, From, To, FixedPacket]),
     ship_to_local_user(Acc2, {From, To, FixedPacket}, StateData, StateName).
 
 response_negative(<<"iq">>, forbidden, From, To, Acc) ->
@@ -1627,7 +1631,8 @@ maybe_send_element_safe(State, El) ->
         _ -> error
     end.
 
--spec maybe_send_element_safe(mongoose_acc:t(), El :: jlib:xmlel(), state()) -> {mongoose_acc:t(), ok | error}.
+-spec maybe_send_element_safe(mongoose_acc:t(), El :: jlib:xmlel(), state()) ->
+    {mongoose_acc:t(), ok | error}.
 maybe_send_element_safe(Acc, El, #state{stream_mgmt = false} = State) ->
     send_element(Acc, El, State);
 maybe_send_element_safe(Acc, State, El) ->
@@ -1717,15 +1722,14 @@ send_trailer(StateData) when StateData#state.xml_socket ->
 send_trailer(StateData) ->
     send_text(StateData, ?STREAM_TRAILER).
 
-
 send_and_maybe_buffer_stanza(OptAcc, {J1, J2, El}, State, StateName)->
     Acc = case OptAcc of
-              und -> mongoose_acc:from_element(El, J1, J2, State#state.server);
+              undefined -> mongoose_acc:from_element(El, J1, J2, State#state.server);
               _ -> OptAcc
           end,
     % to be removed
     {_NAcc, SendResult, BufferedStateData} =
-        send_and_maybe_buffer_stanza({J1, J2, mod_amp:strip_amp_el_from_request(El)}, State),
+        send_and_maybe_buffer_stanza(Acc, {J1, J2, mod_amp:strip_amp_el_from_request(El)}, State),
     % if we have to check packet before sending we should do it much earlier, when it is
     % still accumulator
     mod_amp:check_packet(El, result_to_amp_event(SendResult)),
