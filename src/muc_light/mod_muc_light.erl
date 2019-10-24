@@ -241,7 +241,14 @@ hooks(Host, MUCHost) ->
 -spec process_packet(Acc :: mongoose_acc:t(), From ::jid:jid(), To ::jid:jid(),
                      El :: exml:element(), Extra :: any()) -> any().
 process_packet(Acc, From, To, El, _Extra) ->
-    process_decoded_packet(From, To, mod_muc_light_codec_backend:decode(From, To, El), Acc, El).
+    case mongoose_packet_handler:filter_local_packet(From, To, Acc, El) of
+        {drop, Acc1} ->
+            {drop, Acc1};
+        {From1, To1, Acc1, El1} ->
+            process_decoded_packet(From1, To1, mod_muc_light_codec_backend:decode(From1, To1, El1), Acc1, El1),
+            %% TODO does it always return an acc? if not, make it do so.
+            {ok, Acc1}
+    end.
 
 -spec process_decoded_packet(From :: jid:jid(), To :: jid:jid(),
                      DecodedPacket :: mod_muc_light_codec:decode_result(),

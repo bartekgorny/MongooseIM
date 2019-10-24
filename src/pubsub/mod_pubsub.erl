@@ -244,9 +244,16 @@ default_host() ->
 
 %% State is an extra data, required for processing
 -spec process_packet(Acc :: mongoose_acc:t(), From ::jid:jid(), To ::jid:jid(), El :: exml:element(),
-                     State :: #state{}) -> any().
-process_packet(_Acc, From, To, El, #state{server_host = ServerHost, access = Access, plugins = Plugins}) ->
-    do_route(ServerHost, Access, Plugins, To#jid.lserver, From, To, El).
+                     State :: #state{}) -> {ok | drop, mongoose_acc:t()}.
+process_packet(Acc, From, To, El, #state{server_host = ServerHost, access = Access, plugins = Plugins}) ->
+    case mongoose_packet_handler:filter_local_packet(From, To, Acc, El) of
+        {drop, Acc1} ->
+            {drop, Acc1};
+        {From1, To1, Acc1, El1} ->
+            do_route(ServerHost, Access, Plugins, To1#jid.lserver, From1, To1, El1),
+            %% TODO refactor to use accumulator
+            {ok, Acc1}
+    end.
 
 %%====================================================================
 %% GDPR callback

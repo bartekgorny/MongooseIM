@@ -465,22 +465,29 @@ stop_supervisor(Host) ->
                      From :: jid:jid(),
                      To :: jid:simple_jid() | jid:jid(),
                      El :: exml:element(),
-                     State :: state()) -> ok | mongoose_acc:t().
+                     State :: state()) -> {ok | drop, mongoose_acc:t()}.
 process_packet(Acc, From, To, El, #state{
                                     access = {AccessRoute, _, _, _},
                                     server_host = ServerHost} = State) ->
-    case acl:match_rule(ServerHost, AccessRoute, From) of
-        allow ->
-            {Room, _, _} = jid:to_lower(To),
-            route_to_room(Room, {From, To, Acc, El}, State);
-        _ ->
-            #xmlel{attrs = Attrs} = El,
-            Lang = xml:get_attr_s(<<"xml:lang">>, Attrs),
-            ErrText = <<"Access denied by service policy">>,
-            ejabberd_router:route_error_reply(To, From, Acc,
-                                              mongoose_xmpp_errors:forbidden(Lang, ErrText))
+    case mongoose_packet_handler:filter_local_packet(From, To, Acc, El) of
+        {drop, Acc1} ->
+            {drop, Acc1};
+        {From1, To1, Acc1, El1} ->
+            case acl:match_rule(ServerHost, AccessRoute, From1) of
+                allow ->
+                    {Room, _, _} = jid:to_lower(To1),
+                    route_to_room(Room, {From1, To1, Acc1, El1}, State),
+                    %% TODO needs a refactor so that route_to_room returns accumulator
+                    {ok, Acc1};
+                _ ->
+                    #xmlel{attrs = Attrs} = El1,
+                    Lang = xml:get_attr_s(<<"xml:lang">>, Attrs),
+                    ErrText = <<"Access denied by service policy">>,
+                    Acc2 = ejabberd_router:route_error_reply(To1, From1, Acc,
+                                                             mongoose_xmpp_errors:forbidden(Lang, ErrText)),
+                    {ok, Acc2}
+            end
     end.
-
 
 -spec route_to_room(room(), from_to_packet(), state()) -> 'ok' | pid().
 route_to_room(<<>>, {_, To, _Acc, _} = Routed, State) ->

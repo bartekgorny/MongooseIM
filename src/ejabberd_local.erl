@@ -133,17 +133,24 @@ process_iq_reply(From, To, Acc, #iq{id = ID} = IQ) ->
 
 -spec process_packet(Acc :: mongoose_acc:t(), From :: jid:jid(), To ::jid:jid(), El :: exml:element(),
                      Extra :: any()) ->
-    ok | {error, lager_not_running}.
+    {ok | drop, mongoose_acc:t()}.
 process_packet(Acc, From, To, El, _Extra) ->
-    try
-        do_route(Acc, From, To, El)
-    catch
-        _:Reason:StackTrace ->
-            ?ERROR_MSG("event=routing_error,from=~ts,to=~ts,module=~p,"
-                       "reason=~p,packet=~ts,stack_trace=~p",
-                       [jid:to_binary(From), jid:to_binary(To),
-                        ?MODULE, Reason, exml:to_binary(mongoose_acc:element(Acc)),
-                        StackTrace])
+    case mongoose_packet_handler:filter_local_packet(From, To, Acc, El) of
+        {drop, Acc1} ->
+            {drop, Acc1};
+        {From1, To1, Acc1, El1} ->
+            try
+                Acc2 = do_route(Acc1, From1, To1, El1),
+                {ok, Acc2}
+            catch
+                _:Reason:StackTrace ->
+                    ?ERROR_MSG("event=routing_error,from=~ts,to=~ts,module=~p,"
+                               "reason=~p,packet=~ts,stack_trace=~p",
+                               [jid:to_binary(From), jid:to_binary(To),
+                                ?MODULE, Reason, exml:to_binary(mongoose_acc:element(Acc)),
+                                StackTrace]),
+                {ok, Acc1}
+            end
     end.
 
 -spec route_iq(From :: jid:jid(),

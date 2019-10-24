@@ -134,9 +134,15 @@ socket_type() ->
 %%%----------------------------------------------------------------------
 
 -spec process_packet(Acc :: mongoose_acc:t(), From :: jid:jid(), To :: jid:jid(),
-    El :: exml:element(), Pid :: pid()) -> any().
+    El :: exml:element(), Pid :: pid()) -> {ok | drop, mongoose_acc:t()}.
 process_packet(Acc, From, To, El, Pid) ->
-    Pid ! {route, From, To, Acc}.
+    case mongoose_packet_handler:filter_local_packet(From, To, Acc, El) of
+        {drop, Acc1} ->
+            {drop, Acc1};
+        {From1, To1, Acc1, El1} ->
+            Pid ! {route, From, To, mongoose_acc:update_stanza(#{from_jid => From1, to_jid => To1, element => El1}, Acc1)},
+            {ok, Acc1}
+    end.
 
 %%%----------------------------------------------------------------------
 %%% Callback functions from gen_fsm
