@@ -56,6 +56,7 @@
 -include("adhoc.hrl").
 -include("jlib.hrl").
 -include("pubsub.hrl").
+-include("session.hrl").
 
 -define(STDTREE, <<"tree">>).
 -define(STDNODE, <<"flat">>).
@@ -3304,7 +3305,7 @@ presence_can_deliver({User, Server, <<>>}, true) ->
     ejabberd_sm:get_user_present_resources(User, Server) =/= [];
 presence_can_deliver({User, Server, Resource}, true) ->
     case ejabberd_sm:get_session(User, Server, Resource) of
-        {_SUser, _SID, SPriority, _SInfo} when SPriority /= undefined -> true;
+        #session{priority = SPriority} when SPriority /= undefined -> true;
         _ -> false
     end.
 

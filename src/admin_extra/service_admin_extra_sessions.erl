@@ -47,6 +47,7 @@
 -include("ejabberd_commands.hrl").
 -include("jlib.hrl").
 -include_lib("exml/include/exml.hrl").
+-include("session.hrl").
 
 -type status() :: binary().
 -type u_s_r_p_st() :: { User    :: jid:user(),
@@ -61,10 +62,6 @@
                                 Prio :: integer(),
                                 NodeS :: string(),
                                 Uptime :: integer()}.
--type usr_nowpid_p_i() :: {jid:simple_jid(),
-                           {Now :: erlang:timestamp(), Pid :: identifier()},
-                           Prio :: integer(),
-                           Info :: string()}.
 
 %%%
 %%% Register commands
@@ -300,13 +297,17 @@ user_sessions_info(User, Host) ->
         end, [], Resources).
 
 
--spec format_user_info(usr_nowpid_p_i()) -> formatted_user_info().
+-spec format_user_info(ejabberd_sm:session()) -> formatted_user_info().
 format_user_info(Usr) ->
     format_user_info(Usr, calendar:datetime_to_gregorian_seconds({date(), time()})).
 
 
--spec format_user_info(usr_nowpid_p_i(), CurrentSec :: non_neg_integer()) -> formatted_user_info().
-format_user_info({{U, S, R}, {Now, Pid}, Priority, Info}, CurrentSec) ->
+-spec format_user_info(ejabberd_sm:session(), CurrentSec :: non_neg_integer()) -> formatted_user_info().
+format_user_info(Session, CurrentSec) ->
+    {U, S, R} = Session#session.usr,
+    {Now, Pid} = Session#session.sid,
+    Priority = Session#session.priority,
+    Info = Session#session.info,
     Conn = proplists:get_value(conn, Info),
     {Ip, Port} = proplists:get_value(ip, Info),
     IPS = inet_parse:ntoa(Ip),

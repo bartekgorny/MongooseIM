@@ -216,11 +216,11 @@ close_session(Acc, SID, User, Server, Resource, Reason) ->
     LUser = jid:nodeprep(User),
     LServer = jid:nameprep(Server),
     LResource = jid:resourceprep(Resource),
-    Info = case ejabberd_gen_sm:get_sessions(sm_backend(), LUser, LServer, LResource) of
-               [Session] ->
-                   Session#session.info;
-               _ ->
-                   []
+    Info = case get_session(LUser, LServer, LResource) of
+               offline ->
+                   [];
+               Session ->
+                   Session#session.info
            end,
     ejabberd_gen_sm:delete_session(sm_backend(), SID, LUser, LServer, LResource),
     JID = jid:make(User, Server, Resource),
@@ -298,17 +298,12 @@ get_user_resources(User, Server) ->
       Server :: jid:server(),
       Resource :: jid:resource().
 get_session_ip(User, Server, Resource) ->
-    LUser = jid:nodeprep(User),
-    LServer = jid:nameprep(Server),
-    LResource = jid:resourceprep(Resource),
-    case ejabberd_gen_sm:get_sessions(sm_backend(), LUser, LServer, LResource) of
-        [] ->
+    case get_session(User, Server, Resource) of
+        offline ->
             undefined;
-        Ss ->
-            Session = lists:max(Ss),
+        Session ->
             proplists:get_value(ip, Session#session.info)
     end.
-
 
 -spec get_session(User, Server, Resource) -> offline | ses_tuple() when
       User :: jid:user(),
@@ -321,13 +316,10 @@ get_session(User, Server, Resource) ->
     case ejabberd_gen_sm:get_sessions(sm_backend(), LUser, LServer, LResource) of
         [] ->
             offline;
-        Ss ->
-            Session = lists:max(Ss),
-            {Session#session.usr,
-             Session#session.sid,
-             Session#session.priority,
-             Session#session.info}
+        [Session] ->
+            Session
     end.
+
 -spec get_raw_sessions(jid:user(), jid:server()) -> [session()].
 get_raw_sessions(User, Server) ->
     clean_session_list(
@@ -620,11 +612,10 @@ do_route(Acc, From, To, {broadcast, Payload} = Broadcast) ->
             lists:foreach(fun({_, Pid}) -> Pid ! BCast end, CurrentPids),
             Acc1;
         _ ->
-            case ejabberd_gen_sm:get_sessions(sm_backend(), LUser, LServer, LResource) of
-                [] ->
+            case get_session(LUser, LServer, LResource) of
+                offline ->
                     Acc; % do nothing
-                Ss ->
-                    Session = lists:max(Ss),
+                Session ->
                     Pid = element(2, Session#session.sid),
                     ?DEBUG("sending to process ~p~n", [Pid]),
                     BCast = {broadcast, Payload},
@@ -642,12 +633,11 @@ do_route(Acc, From, To, El) ->
             do_route_no_resource(Name, xml:get_attr_s(<<"type">>, Attrs),
                                  From, To, Acc, El);
         _ ->
-            case ejabberd_gen_sm:get_sessions(sm_backend(), LUser, LServer, LResource) of
-                [] ->
+            case get_session(LUser, LServer, LResource) of
+                offline ->
                     do_route_offline(Name, xml:get_attr_s(<<"type">>, Attrs),
                                      From, To, Acc, El);
-                Ss ->
-                    Session = lists:max(Ss),
+                Session ->
                     Pid = element(2, Session#session.sid),
                     ?DEBUG("sending to process ~p~n", [Pid]),
                     Pid ! {route, From, To, Acc},
@@ -731,12 +721,12 @@ do_route_no_resource(_, _, _, _, Acc, _) ->
       To :: jid:jid(),
       Acc :: mongoose_acc:t(),
       Packet :: exml:element().
-do_route_offline(<<"message">>, _, From, To, Acc, Packet)  ->
+do_route_offline(<<"message">>, Type, From, To, Acc, Packet)  ->
     Drop = ejabberd_hooks:run_fold(sm_filter_offline_message, To#jid.lserver,
                    false, [From, To, Packet]),
     case Drop of
         false ->
-            route_message(From, To, Acc, Packet);
+            process_offline_message(Type, From, To, Acc, Packet);
         true ->
             ?DEBUG("issue=\"message droped\", to=~1000p", [To]),
             Acc
@@ -824,22 +814,36 @@ route_message(From, To, Acc, Packet) ->
               PrioPid),
               Acc;
         _ ->
-            MessageType = xml:get_tag_attr_s(<<"type">>, Packet),
-            route_message_by_type(MessageType, From, To, Acc, Packet)
+            process_offline_message(From, To, Acc, Packet)
     end.
 
-route_message_by_type(<<"error">>, _From, _To, Acc, _Packet) ->
+-spec process_offline_message(From, To, Acc, Packet) -> Acc when
+    From :: jid:jid(),
+    To :: jid:jid(),
+    Acc :: mongoose_acc:t(),
+    Packet :: exml:element().
+process_offline_message(From, To, Acc, Packet) ->
+    MessageType = xml:get_tag_attr_s(<<"type">>, Packet),
+    process_offline_message(MessageType, From, To, Acc, Packet).
+
+-spec process_offline_message(MessageType, From, To, Acc, Packet) -> Acc when
+    MessageType :: binary(),
+    From :: jid:jid(),
+    To :: jid:jid(),
+    Acc :: mongoose_acc:t(),
+    Packet :: exml:element().
+process_offline_message(<<"error">>, _From, _To, Acc, _Packet) ->
     Acc;
-route_message_by_type(<<"groupchat">>, From, To, Acc, Packet) ->
+process_offline_message(<<"groupchat">>, From, To, Acc, Packet) ->
     LServer = To#jid.lserver,
     ejabberd_hooks:run_fold(offline_groupchat_message_hook,
         LServer,
         Acc,
         [From, To, Packet]);
-route_message_by_type(<<"headline">>, From, To, Acc, Packet) ->
+process_offline_message(<<"headline">>, From, To, Acc, Packet) ->
     {stop, Acc1} = bounce_offline_message(Acc, From, To, Packet),
     Acc1;
-route_message_by_type(_, From, To, Acc, Packet) ->
+process_offline_message(_, From, To, Acc, Packet) ->
     LUser = To#jid.luser,
     LServer = To#jid.lserver,
     case ejabberd_auth:is_user_exists(LUser, LServer) of
