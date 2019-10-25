@@ -617,7 +617,7 @@ do_route(Acc, From, To, Payload) ->
     From :: jid:jid(),
     To :: jid:jid(),
     Payload :: exml:element() | ejabberd_c2s:broadcast().
-do_route(_Mode, Acc, From, To, {broadcast, Payload} = Broadcast) ->
+do_route(Mode, Acc, From, To, {broadcast, Payload} = Broadcast) ->
     ?DEBUG("from=~p, to=~p, broadcast=~p", [From, To, Broadcast]),
     #jid{ luser = LUser, lserver = LServer, lresource = LResource} = To,
     case LResource of
@@ -627,8 +627,7 @@ do_route(_Mode, Acc, From, To, {broadcast, Payload} = Broadcast) ->
                                            [From, To, Broadcast, length(CurrentPids)]),
             ?DEBUG("bc_to=~p~n", [CurrentPids]),
             BCast = {broadcast, Payload},
-            lists:foreach(fun({_, Pid}) -> Pid ! BCast end, CurrentPids),
-            Acc1;
+            lists:foldl(fun({_, Pid}, Accum) -> ship_message(Mode, Pid, BCast, Accum) end, Acc, CurrentPids);
         _ ->
             case get_session(LUser, LServer, LResource) of
                 offline ->
@@ -637,8 +636,7 @@ do_route(_Mode, Acc, From, To, {broadcast, Payload} = Broadcast) ->
                     Pid = element(2, Session#session.sid),
                     ?DEBUG("sending to process ~p~n", [Pid]),
                     BCast = {broadcast, Acc, Payload},
-                    Pid ! BCast,
-                    Acc
+                    ship_message(Mode, Pid, BCast, Acc)
             end
     end;
 do_route(Mode, Acc, From, To, El) ->
@@ -658,16 +656,15 @@ do_route(Mode, Acc, From, To, El) ->
                 Session ->
                     Pid = element(2, Session#session.sid),
                     ?DEBUG("sending to process ~p~n", [Pid]),
-                    Pid ! {route, From, To, Acc},
-                    Acc
+                    ship_message(Mode, Pid, {route, From, To, Acc}, Acc)
             end
     end.
 
-%%ship_message(async, Pid, Message, Acc) ->
-%%    Pid ! Message,
-%%    Acc;
-%%ship_message(sync, Pid, Message, Acc) ->
-%%    ok.
+ship_message(async, Pid, Message, Acc) ->
+    Pid ! Message,
+    Acc;
+ship_message(sync, Pid, Message, _Acc) ->
+    gen_fsm:sync_send_event(Pid, Message).
 
 -spec do_route_no_resource_presence_prv(From, To, Acc, Packet, Type, Reason) -> boolean() when
       From :: jid:jid(),
@@ -822,7 +819,7 @@ is_privacy_allow(_From, To, Acc, _Packet, PrivacyList) ->
       To :: jid:jid(),
       Acc :: mongoose_acc:t(),
       Packet :: exml:element().
-route_message(_Mode, From, To, Acc, Packet) ->
+route_message(Mode, From, To, Acc, Packet) ->
     LUser = To#jid.luser,
     LServer = To#jid.lserver,
     PrioPid = get_user_present_pids(LUser, LServer),
@@ -833,8 +830,7 @@ route_message(_Mode, From, To, Acc, Packet) ->
               %% positive
               fun({Prio, Pid}, Accum) when Prio == Priority ->
                  %% we will lose message if PID is not alive
-                      Pid ! {route, From, To, Accum},
-                      Accum;
+                      ship_message(Mode, Pid, {route, From, To, Accum}, Accum);
                  %% Ignore other priority:
                  ({_Prio, _Pid}, Accum) ->
                       Accum

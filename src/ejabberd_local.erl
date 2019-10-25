@@ -392,7 +392,18 @@ do_route(Acc, From, To, El) ->
            [From, To, El, 8]),
     case directed_to(To) of
         user ->
-            ejabberd_sm:route(From, To, Acc, El);
+            case mongoose_acc:stanza_name(Acc) of
+                <<"message">> ->
+                    ejabberd_sm:sync_route(From, To, Acc, El);
+                    % run filter_local_packet if not routed (no online resources)
+                    % if there are online resources, then we should run the hook on first of them
+                    % and store the result, so that it is not ran again
+                    % the issue being that the hook may change From, To and El, and next processes should use these
+                    % so they must be passed on somehow
+                _ ->
+                    % run filter_local_packet before
+                    ejabberd_sm:route(From, To, Acc, El)
+            end;
         server ->
             case El#xmlel.name of
                 <<"iq">> ->

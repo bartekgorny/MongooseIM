@@ -953,6 +953,16 @@ resume_session(Msg, StateData) ->
 %%          {stop, Reason, Reply, NewStateData}
 %%----------------------------------------------------------------------
 
+session_established({broadcast, Acc0, Broadcast}, _From, StateData) ->
+    Acc1 = ejabberd_hooks:run_fold(c2s_loop_debug, Acc0, [{broadcast, Broadcast}]),
+    ?DEBUG("event=broadcast,data=~p", [Broadcast]),
+    {Acc2, Res} = handle_routed_broadcast(Acc1, Broadcast, StateData),
+    {Act, NewState, NewData, Acc} = handle_broadcast_result(Acc2, Res, session_established, StateData),
+    finish_state(Act, NewState, NewData, Acc); % fsm_reply, maybe?
+session_established({route, From, To, Acc0}, _From, StateData) ->
+    Acc1 = ejabberd_hooks:run_fold(c2s_loop_debug, Acc0, [{route, From, To}]),
+    {Act, NewState, NewData, Acc} = process_incoming_stanza_with_conflict_check(From, To, Acc1, session_established, StateData),
+    finish_state(Act, NewState, NewData, Acc);
 session_established(resume, _From, SD) ->
     handover_session(SD).
 
@@ -3001,6 +3011,16 @@ finish_state(ok, StateName, StateData) ->
     fsm_next_state(StateName, StateData);
 finish_state(resume, _, StateData) ->
     maybe_enter_resume_session(StateData).
+
+finish_state(Action, Specifier, StateData, Reply) ->
+    case finish_state(Action, Specifier, StateData) of
+        {stop, Reason, NewStateData} ->
+            {stop, Reason, NewStateData};
+        {next_state, NewState, NewStateData} ->
+            {reply, Reply, NewState, NewStateData};
+        {next_state, NewState, NewStateData, Timeout} ->
+            {reply, Reply, NewState, NewStateData, Timeout}
+    end.
 
 maybe_enter_resume_session(StateData) ->
     maybe_enter_resume_session(StateData#state.stream_mgmt_id, StateData).
