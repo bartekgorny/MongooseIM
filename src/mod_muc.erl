@@ -54,7 +54,7 @@
          terminate/2, code_change/3]).
 
 %% packet handler callback
--export([process_packet/5]).
+-export([process_packet/6]).
 
 %% Hooks handlers
 -export([is_room_owner/3,
@@ -461,15 +461,16 @@ stop_supervisor(Host) ->
     ejabberd_sup:stop_child(Proc).
 
 
--spec process_packet(Acc :: mongoose_acc:t(),
+-spec process_packet(Host :: jid:lserver(),
+                     Acc :: mongoose_acc:t(),
                      From :: jid:jid(),
                      To :: jid:simple_jid() | jid:jid(),
                      El :: exml:element(),
                      State :: state()) -> {ok | drop, mongoose_acc:t()}.
-process_packet(Acc, From, To, El, #state{
+process_packet(Host, Acc, From, To, El, #state{
                                     access = {AccessRoute, _, _, _},
                                     server_host = ServerHost} = State) ->
-    case mongoose_packet_handler:filter_local_packet(From, To, Acc, El) of
+    case mongoose_packet_handler:filter_local_packet(Host, From, To, Acc, El) of
         {drop, Acc1} ->
             {drop, Acc1};
         {From1, To1, Acc1, El1} ->

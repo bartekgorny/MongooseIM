@@ -27,15 +27,15 @@
 %% Callback declarations
 %%----------------------------------------------------------------------
 
--callback process_packet(Acc :: mongoose_acc:t(), From ::jid:jid(), To ::jid:jid(),
+-callback process_packet(Host :: jid:lserver(), Acc :: mongoose_acc:t(), From ::jid:jid(), To ::jid:jid(),
                          El :: exml:element(), Extra :: any()) -> {ok | drop, mongoose_acc:t()}.
 
 %%----------------------------------------------------------------------
 %% API
 %%----------------------------------------------------------------------
 
--export([new/1, new/2, process/5]).
--export([filter_local_packet/4]).
+-export([new/1, new/2, process/6]).
+-export([filter_local_packet/5]).
 %% Getters
 -export([module/1, extra/1]).
 
@@ -47,13 +47,13 @@ new(Module) ->
 new(Module, Extra) when is_atom(Module) ->
     #packet_handler{ module = Module, extra = Extra }.
 
--spec process(Handler :: t(),
+-spec process(Host :: jid:lserver(), Handler :: t(),
               Acc :: mongoose_acc:t(),
               From ::jid:jid(),
               To ::jid:jid(),
               El :: exml:element()) -> {ok | drop, mongoose_acc:t()}.
-process(#packet_handler{ module = Module, extra = Extra }, Acc, From, To, El) ->
-    Module:process_packet(Acc, From, To, El, Extra).
+process(Host, #packet_handler{ module = Module, extra = Extra }, Acc, From, To, El) ->
+    Module:process_packet(Host, Acc, From, To, El, Extra).
 
 module(#packet_handler{ module = Module }) ->
     Module.
@@ -61,9 +61,8 @@ module(#packet_handler{ module = Module }) ->
 extra(#packet_handler{ extra = Extra }) ->
     Extra.
 
-filter_local_packet(OrigFrom, OrigTo, Acc0, OrigPacket) ->
-    LDstDomain = OrigTo#jid.lserver,
-    case ejabberd_hooks:run_fold(filter_local_packet, LDstDomain,
+filter_local_packet(Host, OrigFrom, OrigTo, Acc0, OrigPacket) ->
+    case ejabberd_hooks:run_fold(filter_local_packet, Host,
                                  {OrigFrom, OrigTo, Acc0, OrigPacket}, []) of
         {From, To, Acc, Packet} ->
             Acc1 = mongoose_acc:update_stanza(#{from_jid => From, to_jid => To, element => Packet}, Acc),

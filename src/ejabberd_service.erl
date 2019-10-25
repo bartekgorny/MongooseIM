@@ -51,7 +51,7 @@
          print_state/1]).
 
 %% packet handler callback
--export([process_packet/5]).
+-export([process_packet/6]).
 
 -include("mongoose.hrl").
 -include("jlib.hrl").
@@ -133,14 +133,14 @@ socket_type() ->
 %%% mongoose_packet_handler callback
 %%%----------------------------------------------------------------------
 
--spec process_packet(Acc :: mongoose_acc:t(), From :: jid:jid(), To :: jid:jid(),
+-spec process_packet(Host :: jid:lserver(), Acc :: mongoose_acc:t(), From :: jid:jid(), To :: jid:jid(),
     El :: exml:element(), Pid :: pid()) -> {ok | drop, mongoose_acc:t()}.
-process_packet(Acc, From, To, El, Pid) ->
-    case mongoose_packet_handler:filter_local_packet(From, To, Acc, El) of
+process_packet(Host, Acc, From, To, El, Pid) ->
+    case mongoose_packet_handler:filter_local_packet(Host, From, To, Acc, El) of
         {drop, Acc1} ->
             {drop, Acc1};
-        {From1, To1, Acc1, El1} ->
-            Pid ! {route, From, To, mongoose_acc:update_stanza(#{from_jid => From1, to_jid => To1, element => El1}, Acc1)},
+        {_From1, _To1, Acc1, _El1} ->
+            Pid ! {route, From, To, Acc1},
             {ok, Acc1}
     end.
 

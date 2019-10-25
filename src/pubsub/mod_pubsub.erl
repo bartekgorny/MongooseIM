@@ -98,7 +98,7 @@
 -export([get_personal_data/2]).
 
 %% packet handler export
--export([process_packet/5]).
+-export([process_packet/6]).
 
 -export([send_loop/1]).
 
@@ -243,10 +243,10 @@ default_host() ->
     <<"pubsub.@HOST@">>.
 
 %% State is an extra data, required for processing
--spec process_packet(Acc :: mongoose_acc:t(), From ::jid:jid(), To ::jid:jid(), El :: exml:element(),
+-spec process_packet(Host :: jid:lserver(), Acc :: mongoose_acc:t(), From ::jid:jid(), To ::jid:jid(), El :: exml:element(),
                      State :: #state{}) -> {ok | drop, mongoose_acc:t()}.
-process_packet(Acc, From, To, El, #state{server_host = ServerHost, access = Access, plugins = Plugins}) ->
-    case mongoose_packet_handler:filter_local_packet(From, To, Acc, El) of
+process_packet(Host, Acc, From, To, El, #state{server_host = ServerHost, access = Access, plugins = Plugins}) ->
+    case mongoose_packet_handler:filter_local_packet(Host, From, To, Acc, El) of
         {drop, Acc1} ->
             {drop, Acc1};
         {From1, To1, Acc1, El1} ->

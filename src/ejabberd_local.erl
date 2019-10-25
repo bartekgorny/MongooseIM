@@ -33,7 +33,7 @@
 %% API
 -export([start_link/0]).
 
--export([process_packet/5,
+-export([process_packet/6,
          route_iq/5,
          route_iq/6,
          process_iq_reply/4,
@@ -131,11 +131,11 @@ process_iq_reply(From, To, Acc, #iq{id = ID} = IQ) ->
     end.
 
 
--spec process_packet(Acc :: mongoose_acc:t(), From :: jid:jid(), To ::jid:jid(), El :: exml:element(),
-                     Extra :: any()) ->
+-spec process_packet(Host :: jid:lserver(), Acc :: mongoose_acc:t(), From :: jid:jid(), To ::jid:jid(),
+                     El :: exml:element(), Extra :: any()) ->
     {ok | drop, mongoose_acc:t()}.
-process_packet(Acc, From, To, El, _Extra) ->
-    case mongoose_packet_handler:filter_local_packet(From, To, Acc, El) of
+process_packet(Host, Acc, From, To, El, _Extra) ->
+    case mongoose_packet_handler:filter_local_packet(Host, From, To, Acc, El) of
         {drop, Acc1} ->
             {drop, Acc1};
         {From1, To1, Acc1, El1} ->
