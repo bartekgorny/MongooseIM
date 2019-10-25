@@ -325,9 +325,6 @@ handle_cast(_Msg, State) ->
 %%                                       {stop, Reason, State}
 %% Description: Handling all non call/cast messages
 %%--------------------------------------------------------------------
-handle_info({route, Acc, From, To, El}, State) ->
-    process_packet(Acc, From, To, El, undefined),
-    {noreply, State};
 handle_info({register_iq_handler, Host, XMLNS, Module, Function}, State) ->
     ets:insert(?IQTABLE, {{XMLNS, Host}, Module, Function}),
     catch mod_disco:register_feature(Host, XMLNS),

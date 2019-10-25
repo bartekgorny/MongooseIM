@@ -353,16 +353,6 @@ code_change(_OldVsn, StateName, StateData, _Extra) ->
 %%          {next_state, NextStateName, NextStateData, Timeout} |
 %%          {stop, Reason, NewStateData}
 %%----------------------------------------------------------------------
-handle_info({send_text, Text}, StateName, StateData) ->
-    % is it ever called?
-    ?ERROR_MSG("{service:send_text, Text}: ~p", [{send_text, Text}]),
-    send_text(StateData, Text),
-    {next_state, StateName, StateData};
-handle_info({send_element, El}, StateName, StateData) ->
-    % is it ever called?
-    ?ERROR_MSG("{service:send_element, El}: ~p~n", [{send_text, El}]),
-    send_element(StateData, El),
-    {next_state, StateName, StateData};
 handle_info({route, From, To, Acc}, StateName, StateData) ->
     Packet = mongoose_acc:element(Acc),
     ?DEBUG("event=packet_to_component,component=\"~s\",from=\"~s\",to=\"~s\"",
