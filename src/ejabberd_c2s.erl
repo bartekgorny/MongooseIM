@@ -1118,13 +1118,17 @@ handle_incoming_message({broadcast, Broadcast}, StateName, StateData) ->
     Acc0 = mongoose_acc:new(#{ location => ?LOCATION,
                                lserver => StateData#state.server,
                                element => undefined }),
+    handle_incoming_message({broadcast, Acc0, Broadcast}, StateName, StateData);
+handle_incoming_message({broadcast, Acc0, Broadcast}, StateName, StateData) ->
     Acc1 = ejabberd_hooks:run_fold(c2s_loop_debug, Acc0, [{broadcast, Broadcast}]),
     ?DEBUG("event=broadcast,data=~p", [Broadcast]),
     {Acc2, Res} = handle_routed_broadcast(Acc1, Broadcast, StateData),
-    handle_broadcast_result(Acc2, Res, StateName, StateData);
+    {Act, NewState, NewData, _Acc} = handle_broadcast_result(Acc2, Res, StateName, StateData),
+    finish_state(Act, NewState, NewData);
 handle_incoming_message({route, From, To, Acc0}, StateName, StateData) ->
     Acc1 = ejabberd_hooks:run_fold(c2s_loop_debug, Acc0, [{route, From, To}]),
-    process_incoming_stanza_with_conflict_check(From, To, Acc1, StateName, StateData);
+    {Act, NewState, NewData, _Acc} = process_incoming_stanza_with_conflict_check(From, To, Acc1, StateName, StateData),
+    finish_state(Act, NewState, NewData);
 handle_incoming_message({send_filtered, Feature, From, To, Packet}, StateName, StateData) ->
     % this is used by pubsub and should be rewritten when someone rewrites pubsub module
     Acc = mongoose_acc:new(#{ location => ?LOCATION,
@@ -1176,7 +1180,7 @@ process_incoming_stanza_with_conflict_check(From, To, Acc, StateName, StateData)
                           "jid=~ts c2s_sid=~p origin_sid=~p acc=~1000p",
                          [jid:to_binary(StateData#state.jid), StateData#state.sid,
                           OriginSID, Acc]),
-            finish_state(ok, StateName, StateData);
+            {ok, StateName, StateData, Acc};
         _ -> %% Continue processing
             process_incoming_stanza(From, To, Acc, StateName, StateData)
     end.
@@ -1221,7 +1225,7 @@ check_incoming_accum_for_conflicts(Acc, #state{sid = SID, jid = JID,
 
 process_incoming_stanza(From, To, Acc, StateName, StateData) ->
     #xmlel{ name = Name } = Packet = mongoose_acc:element(Acc),
-    {Act, _NextAcc, NextState} = case handle_routed(Name, From, To, Acc, StateData) of
+    {Act, NextAcc, NextState} = case handle_routed(Name, From, To, Acc, StateData) of
                                      {allow, NewAcc, NewPacket, NewState} ->
                                          preprocess_and_ship(NewAcc, From, To, NewPacket, NewState);
                                      {allow, NewAcc, NewState} ->
@@ -1230,7 +1234,7 @@ process_incoming_stanza(From, To, Acc, StateName, StateData) ->
                                          response_negative(Name, Reason, From, To, NewAcc),
                                          {ok, NewAcc, NewState}
                                  end,
-    finish_state(Act, StateName, NextState).
+    {Act, StateName, NextState, NextAcc}.
 
 
 -spec preprocess_and_ship(Acc :: mongoose_acc:t(),
@@ -1375,12 +1379,12 @@ handle_broadcast_result(Acc, {exit, ErrorMessage}, _StateName, StateData) ->
     Lang = StateData#state.lang,
     send_element(Acc, mongoose_xmpp_errors:stream_conflict(Lang, ErrorMessage), StateData),
     send_trailer(StateData),
-    {stop, normal, StateData};
+    {stop, normal, StateData, Acc};
 handle_broadcast_result(Acc, {send_new, From, To, Stanza, NewState}, StateName, _StateData) ->
-    {Act, _, NewStateData} = ship_to_local_user(Acc, {From, To, Stanza}, NewState),
-    finish_state(Act, StateName, NewStateData);
-handle_broadcast_result(_Acc, {new_state, NewState}, StateName, _StateData) ->
-    fsm_next_state(StateName, NewState).
+    {Act, Acc1, NewStateData} = ship_to_local_user(Acc, {From, To, Stanza}, NewState),
+    {Act, StateName, NewStateData, Acc1};
+handle_broadcast_result(Acc, {new_state, NewState}, StateName, _StateData) ->
+    {ok, StateName, NewState, Acc}.
 
 privacy_list_push_iq(PrivListName) ->
     #iq{type = set, xmlns = ?NS_PRIVACY,
@@ -2991,6 +2995,8 @@ re_route_packets(Buffer) ->
      || {From, To, Packet} <- lists:reverse(Buffer)],
     ok.
 
+finish_state(stop, Reason, StateData) ->
+    {stop, Reason, StateData};
 finish_state(ok, StateName, StateData) ->
     fsm_next_state(StateName, StateData);
 finish_state(resume, _, StateData) ->

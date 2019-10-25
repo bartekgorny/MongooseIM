@@ -33,6 +33,7 @@
          start_link/0,
          route/3,
          route/4,
+         sync_route/4,
          open_session/5, open_session/6,
          close_session/6,
          store_info/4,
@@ -132,6 +133,7 @@ start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 
+%% this is deprecated - you should always pass an acc
 -spec route(From, To, Packet) -> Acc when
       From :: jid:jid(),
       To :: jid:jid(),
@@ -159,21 +161,27 @@ route(From, To, {broadcast, Payload}) ->
 route(From, To, Acc) ->
     route(From, To, Acc, mongoose_acc:element(Acc)).
 
-route(From, To, Acc, {broadcast, Payload}) ->
-    case (catch do_route(Acc, From, To, {broadcast, Payload})) of
+route(From, To, Acc, Message) ->
+    route(async, From, To, Acc, Message).
+
+sync_route(From, To, Acc, Message) ->
+    route(sync, From, To, Acc, Message).
+
+route(Mode, From, To, Acc, {broadcast, Payload}) ->
+    case (catch do_route(Mode, Acc, From, To, {broadcast, Payload})) of
         {'EXIT', {Reason, StackTrace}} ->
-            ?ERROR_MSG("error when routing from=~ts to=~ts in module=~p~n~nreason=~p~n~n"
+            ?ERROR_MSG("error when ~p routing from=~ts to=~ts in module=~p~n~nreason=~p~n~n"
             "broadcast=~p~n~nstack_trace=~p~n",
-                [jid:to_binary(From), jid:to_binary(To),
+                [Mode, jid:to_binary(From), jid:to_binary(To),
                     ?MODULE, Reason, Payload, StackTrace]);
         Acc1 -> Acc1
     end;
-route(From, To, Acc, El) ->
-    case (catch do_route(Acc, From, To, El)) of
+route(Mode, From, To, Acc, El) ->
+    case (catch do_route(Mode, Acc, From, To, El)) of
         {'EXIT', {Reason, StackTrace}} ->
-            ?ERROR_MSG("error when routing from=~ts to=~ts in module=~p~n~nreason=~p~n~n"
+            ?ERROR_MSG("error when ~p routing from=~ts to=~ts in module=~p~n~nreason=~p~n~n"
                        "packet=~ts~n~nstack_trace=~p~n",
-                       [jid:to_binary(From), jid:to_binary(To),
+                       [Mode, jid:to_binary(From), jid:to_binary(To),
                         ?MODULE, Reason, exml:to_binary(El), StackTrace]);
         Acc1 -> Acc1
     end.
@@ -594,12 +602,22 @@ set_session(SID, User, Server, Resource, Priority, Info) ->
 do_filter(From, To, Packet) ->
     {From, To, Packet}.
 
+
 -spec do_route(Acc, From, To, Payload) -> Acc when
     Acc :: mongoose_acc:t(),
     From :: jid:jid(),
     To :: jid:jid(),
     Payload :: exml:element() | ejabberd_c2s:broadcast().
-do_route(Acc, From, To, {broadcast, Payload} = Broadcast) ->
+do_route(Acc, From, To, Payload) ->
+    do_route(async, Acc, From, To, Payload).
+
+-spec do_route(Mode, Acc, From, To, Payload) -> Acc when
+    Mode :: async | sync,
+    Acc :: mongoose_acc:t(),
+    From :: jid:jid(),
+    To :: jid:jid(),
+    Payload :: exml:element() | ejabberd_c2s:broadcast().
+do_route(_Mode, Acc, From, To, {broadcast, Payload} = Broadcast) ->
     ?DEBUG("from=~p, to=~p, broadcast=~p", [From, To, Broadcast]),
     #jid{ luser = LUser, lserver = LServer, lresource = LResource} = To,
     case LResource of
@@ -618,19 +636,19 @@ do_route(Acc, From, To, {broadcast, Payload} = Broadcast) ->
                 Session ->
                     Pid = element(2, Session#session.sid),
                     ?DEBUG("sending to process ~p~n", [Pid]),
-                    BCast = {broadcast, Payload},
+                    BCast = {broadcast, Acc, Payload},
                     Pid ! BCast,
                     Acc
             end
     end;
-do_route(Acc, From, To, El) ->
+do_route(Mode, Acc, From, To, El) ->
     ?DEBUG("session manager~n\tfrom ~p~n\tto ~p~n\tpacket ~P~n",
            [From, To, Acc, 8]),
     #jid{ luser = LUser, lserver = LServer, lresource = LResource} = To,
     #xmlel{name = Name, attrs = Attrs} = El,
     case LResource of
         <<>> ->
-            do_route_no_resource(Name, xml:get_attr_s(<<"type">>, Attrs),
+            do_route_no_resource(Mode, Name, xml:get_attr_s(<<"type">>, Attrs),
                                  From, To, Acc, El);
         _ ->
             case get_session(LUser, LServer, LResource) of
@@ -644,6 +662,12 @@ do_route(Acc, From, To, El) ->
                     Acc
             end
     end.
+
+%%ship_message(async, Pid, Message, Acc) ->
+%%    Pid ! Message,
+%%    Acc;
+%%ship_message(sync, Pid, Message, Acc) ->
+%%    ok.
 
 -spec do_route_no_resource_presence_prv(From, To, Acc, Packet, Type, Reason) -> boolean() when
       From :: jid:jid(),
@@ -684,34 +708,36 @@ do_route_no_resource_presence(_, _, _, _, _) ->
     true.
 
 
--spec do_route_no_resource(Name, Type, From, To, Acc, El) -> Acc when
+-spec do_route_no_resource(Mode, Name, Type, From, To, Acc, El) -> Acc when
+      Mode :: async | sync,
       Name :: undefined | binary(),
       Type :: any(),
       From :: jid:jid(),
       To :: jid:jid(),
       Acc :: mongoose_acc:t(),
       El :: exml:element().
-do_route_no_resource(<<"presence">>, Type, From, To, Acc, El) ->
+do_route_no_resource(Mode, <<"presence">>, Type, From, To, Acc, El) ->
     case do_route_no_resource_presence(Type, From, To, Acc, El) of
         true ->
             PResources = get_user_present_resources(To#jid.luser, To#jid.lserver),
             lists:foldl(fun({_, R}, A) ->
-                            do_route(A, From, jid:replace_resource(To, R), El)
+                            do_route(Mode, A, From, jid:replace_resource(To, R), El)
                         end,
                         Acc,
                         PResources);
         false ->
             Acc
     end;
-do_route_no_resource(<<"message">>, _, From, To, Acc, El) ->
-    route_message(From, To, Acc, El);
-do_route_no_resource(<<"iq">>, _, From, To, Acc, El) ->
+do_route_no_resource(Mode, <<"message">>, _, From, To, Acc, El) ->
+    route_message(Mode, From, To, Acc, El);
+do_route_no_resource(_, <<"iq">>, _, From, To, Acc, El) ->
     process_iq(From, To, Acc, El);
-do_route_no_resource(<<"broadcast">>, _, From, To, Acc, El) ->
+do_route_no_resource(_, <<"broadcast">>, _, From, To, Acc, El) ->
     %% Backward compatibility
+    %% do we still need it?
     ejabberd_hooks:run(sm_broadcast, To#jid.lserver, [From, To, Acc]),
     broadcast_packet(From, To, Acc, El);
-do_route_no_resource(_, _, _, _, Acc, _) ->
+do_route_no_resource(_, _, _, _, _, Acc, _) ->
     Acc.
 
 -spec do_route_offline(Name, Type, From, To, Acc, Packet) -> mongoose_acc:t() when
@@ -751,7 +777,7 @@ broadcast_packet(From, To, Acc, El) ->
     #jid{user = User, server = Server} = To,
     lists:foldl(
       fun(A, R) ->
-              do_route(A,
+              do_route(async, A,
                        From,
                        jid:replace_resource(To, R),
                        El)
@@ -790,29 +816,31 @@ is_privacy_allow(_From, To, Acc, _Packet, PrivacyList) ->
     allow == Res.
 
 
--spec route_message(From, To, Acc, Packet) -> Acc when
+-spec route_message(Mode, From, To, Acc, Packet) -> Acc when
+      Mode :: sync | async,
       From :: jid:jid(),
       To :: jid:jid(),
       Acc :: mongoose_acc:t(),
       Packet :: exml:element().
-route_message(From, To, Acc, Packet) ->
+route_message(_Mode, From, To, Acc, Packet) ->
     LUser = To#jid.luser,
     LServer = To#jid.lserver,
     PrioPid = get_user_present_pids(LUser, LServer),
     case catch lists:max(PrioPid) of
         {Priority, _} when is_integer(Priority), Priority >= 0 ->
-            lists:foreach(
+            lists:foldl(
               %% Route messages to all priority that equals the max, if
               %% positive
-              fun({Prio, Pid}) when Prio == Priority ->
+              fun({Prio, Pid}, Accum) when Prio == Priority ->
                  %% we will lose message if PID is not alive
-                      Pid ! {route, From, To, Acc};
+                      Pid ! {route, From, To, Accum},
+                      Accum;
                  %% Ignore other priority:
-                 ({_Prio, _Pid}) ->
-                      ok
+                 ({_Prio, _Pid}, Accum) ->
+                      Accum
               end,
-              PrioPid),
-              Acc;
+              Acc,
+              PrioPid);
         _ ->
             process_offline_message(From, To, Acc, Packet)
     end.
