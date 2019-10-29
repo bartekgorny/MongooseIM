@@ -140,7 +140,7 @@ process_packet(Host, Acc, From, To, El, _Extra) ->
             {drop, Acc1};
         {ok, Acc1} ->
             try
-                Acc2 = do_route(Acc1),
+                Acc2 = do_route(Host, Acc1),
                 {ok, Acc2}
             catch
                 _:Reason:StackTrace ->
@@ -383,8 +383,8 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
--spec do_route(Acc :: mongoose_acc:t()) -> mongoose_acc:t().
-do_route(Acc) ->
+-spec do_route(Host :: jid:lserver(), Acc :: mongoose_acc:t()) -> mongoose_acc:t().
+do_route(Host, Acc) ->
     From = mongoose_acc:from_jid(Acc),
     To = mongoose_acc:to_jid(Acc),
     El = mongoose_acc:element(Acc),
@@ -394,15 +394,19 @@ do_route(Acc) ->
         user ->
             case routing_mode(Acc) of
                 sync ->
-                    ejabberd_sm:sync_route(From, To, Acc, El);
+                    ejabberd_sm:sync_route(From, To, Acc, El),
                     % run filter_local_packet if not routed (no online resources)
                     % if there are online resources, then we should run the hook on first of them
-                    % and store the result, so that it is not ran again
-                    % the issue being that the hook may change From, To and El, and next processes should use these
-                    % so they must be passed on somehow
+                    {_, Acc1} = mongoose_packet_handler:filter_local_packet(Host, From, To, Acc, El),
+                    Acc1;
                 async ->
                     % run filter_local_packet before
-                    ejabberd_sm:route(From, To, Acc, El)
+                    case mongoose_packet_handler:filter_local_packet(Host, From, To, Acc, El) of
+                        {ok, Acc1} ->
+                            ejabberd_sm:route(From, To, Acc, El);
+                        {drop, Acc1} ->
+                            Acc1
+                    end
             end;
         server ->
             case El#xmlel.name of
