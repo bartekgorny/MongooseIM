@@ -627,7 +627,7 @@ do_route(Mode, Acc, From, To, {broadcast, Payload} = Broadcast) ->
                                            [From, To, Broadcast, length(CurrentPids)]),
             ?DEBUG("bc_to=~p~n", [CurrentPids]),
             BCast = {broadcast, Payload},
-            lists:foldl(fun({_, Pid}, Accum) -> ship_message(Mode, Pid, BCast, Accum) end, Acc, CurrentPids);
+            lists:foldl(fun({_, Pid}, Accum) -> ship_message(Mode, Pid, BCast, Accum) end, Acc1, CurrentPids);
         _ ->
             case get_session(LUser, LServer, LResource) of
                 offline ->
@@ -664,7 +664,9 @@ ship_message(async, Pid, Message, Acc) ->
     Pid ! Message,
     Acc;
 ship_message(sync, Pid, Message, _Acc) ->
-    gen_fsm:sync_send_event(Pid, Message).
+    % things like muc or pubsub might need a safety valve, in case of a netsplit
+    % or parallelise calls on another level
+    gen_fsm:sync_send_event(Pid, Message, 1000).
 
 -spec do_route_no_resource_presence_prv(From, To, Acc, Packet, Type, Reason) -> boolean() when
       From :: jid:jid(),
@@ -820,6 +822,7 @@ is_privacy_allow(_From, To, Acc, _Packet, PrivacyList) ->
       Acc :: mongoose_acc:t(),
       Packet :: exml:element().
 route_message(Mode, From, To, Acc, Packet) ->
+    % TODO Packet is effectively ignored, can we remove it?
     LUser = To#jid.luser,
     LServer = To#jid.lserver,
     PrioPid = get_user_present_pids(LUser, LServer),
@@ -828,14 +831,17 @@ route_message(Mode, From, To, Acc, Packet) ->
             lists:foldl(
               %% Route messages to all priority that equals the max, if
               %% positive
-              fun({Prio, Pid}, Accum) when Prio == Priority ->
+              fun({Prio, Pid}, {F, T, A, P}) when Prio == Priority ->
                  %% we will lose message if PID is not alive
-                      ship_message(Mode, Pid, {route, From, To, Accum}, Accum);
+                      A1 = ship_message(Mode, Pid, {route, F, T, A}, A),
+                      % the first call might have changed something because so we have to pass the return
+                      % values to the next call
+                      {mongoose_acc:from_jid(A1), mongoose_acc:to_jid(A1), A1, P};
                  %% Ignore other priority:
                  ({_Prio, _Pid}, Accum) ->
                       Accum
               end,
-              Acc,
+              {From, To, Acc, Packet},
               PrioPid);
         _ ->
             process_offline_message(From, To, Acc, Packet)
