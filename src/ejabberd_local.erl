@@ -392,15 +392,15 @@ do_route(Acc, From, To, El) ->
            [From, To, El, 8]),
     case directed_to(To) of
         user ->
-            case mongoose_acc:stanza_name(Acc) of
-                <<"message">> ->
+            case routing_mode(Acc) of
+                sync ->
                     ejabberd_sm:sync_route(From, To, Acc, El);
                     % run filter_local_packet if not routed (no online resources)
                     % if there are online resources, then we should run the hook on first of them
                     % and store the result, so that it is not ran again
                     % the issue being that the hook may change From, To and El, and next processes should use these
                     % so they must be passed on somehow
-                _ ->
+                async ->
                     % run filter_local_packet before
                     ejabberd_sm:route(From, To, Acc, El)
             end;
@@ -422,6 +422,14 @@ do_route(Acc, From, To, El) ->
                                             [From, To, El])
             end
     end.
+
+% we can use sync mode only for non-error messages, because they never cause deadlock
+routing_mode(Acc) ->
+    routing_mode(mongoose_acc:stanza_name(Acc), mongoose_acc:stanza_type(Acc)).
+
+routing_mode(_, <<"error">>) -> async;
+routing_mode(<<"message">>, _) -> sync;
+routing_mode(_, _) -> async.
 
 -spec directed_to(jid:jid()) -> user | server | local_resource.
 directed_to(To) ->
