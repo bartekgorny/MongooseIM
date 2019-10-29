@@ -240,12 +240,12 @@ close_session(Acc, SID, User, Server, Resource, Reason) ->
 store_info(User, Server, Resource, {Key, _Value} = KV) ->
     case get_session(User, Server, Resource) of
         offline -> {error, offline};
-        {_SUser, SID, SPriority, SInfo} ->
-            case SID of
-                {_, Pid} when self() =:= Pid ->
+        Session ->
+            case Session#session.sid of
+                {P, Pid} when self() =:= Pid ->
                     %% It's safe to allow process update it's own record
-                    set_session(SID, User, Server, Resource, SPriority,
-                                lists:keystore(Key, 1, SInfo, KV)),
+                    set_session({P, Pid}, User, Server, Resource, Session#session.priority,
+                                lists:keystore(Key, 1, Session#session.info, KV)),
                     {ok, KV};
                 {_, Pid} ->
                     %% Ask the process to update it's record itself
@@ -324,8 +324,8 @@ get_session(User, Server, Resource) ->
     case ejabberd_gen_sm:get_sessions(sm_backend(), LUser, LServer, LResource) of
         [] ->
             offline;
-        [Session] ->
-            Session
+        Sessions ->
+            lists:max(Sessions)
     end.
 
 -spec get_raw_sessions(jid:user(), jid:server()) -> [session()].
@@ -667,6 +667,7 @@ ship_message(sync, Pid, Message, _Acc) ->
     % things like muc or pubsub might need a safety valve, in case of a netsplit
     % or parallelise calls on another level
     gen_fsm:sync_send_event(Pid, Message, 1000).
+% all_state event, mauybe?
 
 -spec do_route_no_resource_presence_prv(From, To, Acc, Packet, Type, Reason) -> boolean() when
       From :: jid:jid(),
