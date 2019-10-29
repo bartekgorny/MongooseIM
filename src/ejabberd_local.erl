@@ -423,13 +423,21 @@ do_route(Acc) ->
             end
     end.
 
-% we can use sync mode only for non-error messages, because they never cause deadlock
 routing_mode(Acc) ->
-    routing_mode(mongoose_acc:stanza_name(Acc), mongoose_acc:stanza_type(Acc)).
+    routing_mode(mongoose_acc:stanza_name(Acc), mongoose_acc:stanza_type(Acc), Acc).
 
-routing_mode(_, <<"error">>) -> async;
-routing_mode(<<"message">>, _) -> sync;
-routing_mode(_, _) -> async.
+% we can use sync mode only for non-error messages, because they never cause deadlock
+routing_mode(_, <<"error">>, _) -> async;
+routing_mode(<<"message">>, _, Acc) ->
+    % unless they are addressed to self, then they may
+    F = jid:to_bare(jid:to_lower(mongoose_acc:from_jid(Acc))),
+    case jid:to_bare(jid:to_lower(mongoose_acc:to_jid(Acc))) of
+        F ->
+            async;
+        _ ->
+            sync
+    end;
+routing_mode(_, _, _) -> async.
 
 -spec directed_to(jid:jid()) -> user | server | local_resource.
 directed_to(To) ->
