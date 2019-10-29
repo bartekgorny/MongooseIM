@@ -21,4 +21,5 @@ do_route(OrigFrom, OrigTo, OrigAcc, OrigPacket, LDstDomain, Handler) ->
                                 to_jid => OrigTo,
                                 element => OrigPacket},
                               OrigAcc),
+    %% BTW, return value from this function is ignored
     mongoose_packet_handler:process(LDstDomain, Handler, Acc0, OrigFrom, OrigTo, OrigPacket).

@@ -57,7 +57,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([do_route/4]).
+%%-export([do_route/4]).
 
 -include("mongoose.hrl").
 -include("jlib.hrl").
@@ -138,9 +138,9 @@ process_packet(Host, Acc, From, To, El, _Extra) ->
     case mongoose_packet_handler:filter_local_packet(Host, From, To, Acc, El) of
         {drop, Acc1} ->
             {drop, Acc1};
-        {From1, To1, Acc1, El1} ->
+        {ok, Acc1} ->
             try
-                Acc2 = do_route(Acc1, From1, To1, El1),
+                Acc2 = do_route(Acc1),
                 {ok, Acc2}
             catch
                 _:Reason:StackTrace ->
@@ -383,11 +383,11 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
--spec do_route(Acc :: mongoose_acc:t(),
-               From :: jid:jid(),
-               To :: jid:jid(),
-               El :: mongoose_acc:t()) -> mongoose_acc:t().
-do_route(Acc, From, To, El) ->
+-spec do_route(Acc :: mongoose_acc:t()) -> mongoose_acc:t().
+do_route(Acc) ->
+    From = mongoose_acc:from_jid(Acc),
+    To = mongoose_acc:to_jid(Acc),
+    El = mongoose_acc:element(Acc),
     ?DEBUG("local route~n\tfrom ~p~n\tto ~p~n\tpacket ~P~n",
            [From, To, El, 8]),
     case directed_to(To) of

@@ -62,11 +62,23 @@ extra(#packet_handler{ extra = Extra }) ->
     Extra.
 
 filter_local_packet(Host, OrigFrom, OrigTo, Acc0, OrigPacket) ->
+    case mongoose_acc:get(hook_result, filter_local_packet, undefined, Acc0) of
+        undefined ->
+            {Res, Acc1} = run_filter_local_packet(Host, OrigFrom, OrigTo, Acc0, OrigPacket),
+            Acc2 = mongoose_acc:set(hook_result, filter_local_packet, Res, Acc1),
+            {Res, Acc2};
+        drop ->
+            {drop, Acc0};
+        ok ->
+            {ok, Acc0}
+    end.
+
+run_filter_local_packet(Host, OrigFrom, OrigTo, Acc0, OrigPacket) ->
     case ejabberd_hooks:run_fold(filter_local_packet, Host,
                                  {OrigFrom, OrigTo, Acc0, OrigPacket}, []) of
         {From, To, Acc, Packet} ->
             Acc1 = mongoose_acc:update_stanza(#{from_jid => From, to_jid => To, element => Packet}, Acc),
-            {From, To, Acc1, Packet};
+            {ok, Acc1};
         drop ->
             ejabberd_hooks:run(xmpp_stanza_dropped,
                                OrigFrom#jid.lserver,
