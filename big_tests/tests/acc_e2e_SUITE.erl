@@ -29,6 +29,8 @@
                              require_rpc_nodes/1,
                              rpc/4]).
 
+-import(push_helper, [become_unavailable/1]).
+
 %%--------------------------------------------------------------------
 %% Suite configuration
 %%--------------------------------------------------------------------
@@ -36,15 +38,18 @@
 all() ->
     [
         {group, message},
-        {group, cache_and_strip}
+        {group, cache_and_strip},
+        {group, sync_routing}
     ].
 
 groups() ->
     G = [
          {message, [], message_test_cases()},
-         {cache_and_strip, [], cache_test_cases()}
+         {cache_and_strip, [], cache_test_cases()},
+         {sync_routing, [], sync_routing_test_cases()}
         ],
-    ct_helper:repeat_all_until_all_ok(G).
+    G.
+%%    ct_helper:repeat_all_until_all_ok(G).
 
 message_test_cases() ->
     [
@@ -54,6 +59,11 @@ message_test_cases() ->
 
 cache_test_cases() ->
     [ filter_local_packet_uses_recipient_values ].
+
+sync_routing_test_cases() ->
+    [filter_local_packet_in_sender_process_if_recipient_is_offline,
+     filter_local_packet_in_recipient_process_if_recipient_is_online
+    ].
 
 suite() ->
     require_rpc_nodes([mim]) ++ escalus:suite().
@@ -102,6 +112,12 @@ end_per_group(_GroupName, _Config) ->
 init_per_testcase(message_altered_by_filter_local_packet_hook = CN, Config) ->
     add_handler(filter_local_packet, alter_message, 60),
     escalus:init_per_testcase(CN, Config);
+init_per_testcase(filter_local_packet_in_sender_process_if_recipient_is_offline, Config) ->
+    add_handler(filter_local_packet, is_in_sender_process, 60),
+    escalus:init_per_testcase(filter_local_packet_in_sender_process_if_recipient_is_offline, Config);
+init_per_testcase(filter_local_packet_in_recipient_process_if_recipient_is_online, Config) ->
+    add_handler(filter_local_packet, is_in_recipient_process, 60),
+    escalus:init_per_testcase(filter_local_packet_in_recipient_process_if_recipient_is_online, Config);
 init_per_testcase(CaseName, Config) ->
     escalus:init_per_testcase(CaseName, Config).
 
@@ -158,13 +174,38 @@ filter_local_packet_uses_recipient_values(Config) ->
             ok
         end).
 
+filter_local_packet_in_sender_process_if_recipient_is_offline(Config) ->
+    %% hook handler sends a stanza back to the sender, just to notify
+    escalus:fresh_story(
+        Config, [{alice, 1}, {bob, 1}],
+        fun(Alice, Bob) ->
+            become_unavailable(Bob),
+            M = escalus_stanza:chat_to(escalus_client:short_jid(Bob), <<"hi">>),
+            escalus:send(Alice, M),
+            R = escalus_client:wait_for_stanza(Alice),
+            ?assertNotEqual(undefined, exml_query:path(R, [{element, <<"ok">>}])),
+            ok
+        end).
+
+filter_local_packet_in_recipient_process_if_recipient_is_online(Config) ->
+    %% hook handler sends a stanza back to the sender, just to notify
+    escalus:fresh_story(
+        Config, [{alice, 1}, {bob, 1}],
+        fun(Alice, Bob) ->
+            M = escalus_stanza:chat_to(escalus_client:short_jid(Bob), <<"hi">>),
+            escalus:send(Alice, M),
+            R = escalus_client:wait_for_stanza(Alice),
+            ?assertNotEqual(undefined, exml_query:path(R, [{element, <<"ok">>}])),
+            ok
+        end).
+
 %%--------------------------------------------------------------------
 %% Helpers
 %%--------------------------------------------------------------------
 
 
 acc_test_helper_code(Config) ->
-    Dir = proplists:get_value(mim_data_dir, Config),
+    Dir = proplists:get_value(data_dir, Config),
     F = filename:join(Dir, "acc_test_helper.erl"),
     {ok, Code} = file:read_file(F),
     binary_to_list(Code).
@@ -180,3 +221,5 @@ host() -> <<"localhost">>.
 %% creates a temporary ets table keeping refs and some attrs of accumulators created in c2s
 recreate_table() ->
     rpc(mim(), acc_test_helper, recreate_table, []).
+
+

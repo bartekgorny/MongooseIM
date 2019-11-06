@@ -78,3 +78,41 @@ cached_my_jid(User, Acc) ->
         Jid ->
             {Jid, Acc}
     end.
+
+is_in_sender_process({From, To, Acc, Packet}) ->
+    case mongoose_acc:stanza_name(Acc) of
+        <<"message">> ->
+            send_if_owned_process(From, From, To, Acc);
+        _ ->
+            ok
+    end,
+    {From, To, Acc, Packet}.
+
+is_in_recipient_process({From, To, Acc, Packet}) ->
+    case mongoose_acc:stanza_name(Acc) of
+        <<"message">> ->
+            send_if_owned_process(To, From, To, Acc);
+        _ ->
+            ok
+    end,
+    {From, To, Acc, Packet}.
+
+send_if_owned_process(Owner, From, To, Acc) ->
+    case is_owned_process(Owner) of
+        true ->
+            M = {xmlel, <<"message">>, [{<<"from">>, To}, {<<"to">>, From}],
+                 [{xmlel, <<"ok">>, [], []}]},
+            Acc1 = mongoose_acc:update_stanza(#{from_jid => To, to_jid => From, element => M}, Acc),
+            ejabberd_router:route(To, From, Acc1, M);
+        false ->
+            ok
+    end.
+
+is_owned_process(Jid) ->
+    {U, S, R} = jid:to_lower(Jid),
+    Self = self(),
+    case ejabberd_sm:get_session_pid(U, S, R) of
+        Self -> true;
+        _ -> false
+    end.
+

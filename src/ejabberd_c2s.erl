@@ -953,16 +953,6 @@ resume_session(Msg, StateData) ->
 %%          {stop, Reason, Reply, NewStateData}
 %%----------------------------------------------------------------------
 
-session_established({route, From, To, Acc0}, _From, StateData) ->
-    Acc1 = ejabberd_hooks:run_fold(c2s_loop_debug, Acc0, [{route, From, To}]),
-    El = mongoose_acc:element(Acc1),
-    {Act, NewState, NewData, Acc} = case mongoose_packet_handler:filter_local_packet(StateData#state.server, From, To, Acc1, El) of
-                                        {ok, Acc3} ->
-                                             process_incoming_stanza_with_conflict_check(From, To, Acc1, session_established, StateData);
-                                        {drop, Acc3} ->
-                                            {ok, session_established, StateData, Acc3}
-                                    end,
-    finish_state(Act, NewState, NewData, Acc); % fsm_reply, maybe?
 session_established(resume, _From, SD) ->
     handover_session(SD).
 
@@ -997,6 +987,21 @@ handle_event(_Event, StateName, StateData) ->
                         State :: state())
 -> {'reply', Reply :: [any()], statename(), state()}
    | {'reply', Reply :: 'ok' | {_, _, _, _}, statename(), state(), timeout()}.
+handle_sync_event({route, From, To, Acc0}, _From, StateName, StateData) ->
+    Acc1 = ejabberd_hooks:run_fold(c2s_loop_debug, Acc0, [{route, From, To}]),
+    El = mongoose_acc:element(Acc1),
+    {Act, NewState, NewData, Acc} = case mongoose_packet_handler:filter_local_packet(StateData#state.server, From, To, Acc1, El) of
+                                        {ok, Acc3} ->
+                                            process_incoming_stanza_with_conflict_check(From, To, Acc3, StateName, StateData);
+                                        {drop, Acc3} ->
+                                            {ok, session_established, StateData, Acc3}
+                                    end,
+    case Act of
+        ok ->
+            fsm_reply(Acc, NewState, NewData);
+        resume ->
+            maybe_enter_resume_session(NewData)
+    end;
 handle_sync_event(get_presence, _From, StateName, StateData) ->
     User = StateData#state.user,
     PresLast = StateData#state.pres_last,
@@ -3012,15 +3017,15 @@ finish_state(ok, StateName, StateData) ->
 finish_state(resume, _, StateData) ->
     maybe_enter_resume_session(StateData).
 
-finish_state(Action, Specifier, StateData, Reply) ->
-    case finish_state(Action, Specifier, StateData) of
-        {stop, Reason, NewStateData} ->
-            {stop, Reason, NewStateData};
-        {next_state, NewState, NewStateData} ->
-            {reply, Reply, NewState, NewStateData};
-        {next_state, NewState, NewStateData, Timeout} ->
-            {reply, Reply, NewState, NewStateData, Timeout}
-    end.
+%%finish_state(Action, Specifier, StateData, Reply) ->
+%%    case finish_state(Action, Specifier, StateData) of
+%%        {stop, Reason, NewStateData} ->
+%%            {stop, Reason, NewStateData};
+%%        {next_state, NewState, NewStateData} ->
+%%            {reply, Reply, NewState, NewStateData};
+%%        {next_state, NewState, NewStateData, Timeout} ->
+%%            {reply, Reply, NewState, NewStateData, Timeout}
+%%    end.
 
 maybe_enter_resume_session(StateData) ->
     maybe_enter_resume_session(StateData#state.stream_mgmt_id, StateData).

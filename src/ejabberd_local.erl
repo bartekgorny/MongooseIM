@@ -135,12 +135,12 @@ process_iq_reply(From, To, Acc, #iq{id = ID} = IQ) ->
                      El :: exml:element(), Extra :: any()) ->
     {ok | drop, mongoose_acc:t()}.
 process_packet(Host, Acc, From, To, El, _Extra) ->
-    case mongoose_packet_handler:filter_local_packet(Host, From, To, Acc, El) of
-        {drop, Acc1} ->
-            {drop, Acc1};
-        {ok, Acc1} ->
+%%    case mongoose_packet_handler:filter_local_packet(Host, From, To, Acc, El) of
+%%        {drop, Acc1} ->
+%%            {drop, Acc1};
+%%        {ok, Acc1} ->
             try
-                Acc2 = do_route(Host, Acc1),
+                Acc2 = do_route(Host, Acc),
                 {ok, Acc2}
             catch
                 _:Reason:StackTrace ->
@@ -149,8 +149,8 @@ process_packet(Host, Acc, From, To, El, _Extra) ->
                                [jid:to_binary(From), jid:to_binary(To),
                                 ?MODULE, Reason, exml:to_binary(mongoose_acc:element(Acc)),
                                 StackTrace]),
-                {ok, Acc1}
-            end
+                {ok, Acc}
+%%            end
     end.
 
 -spec route_iq(From :: jid:jid(),

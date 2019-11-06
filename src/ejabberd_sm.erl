@@ -617,6 +617,9 @@ do_route(Acc, From, To, Payload) ->
     From :: jid:jid(),
     To :: jid:jid(),
     Payload :: exml:element() | ejabberd_c2s:broadcast().
+do_route(sync, _Acc, _From, _To, {broadcast, _Payload}) ->
+    ?CRITICAL_MSG("Thou shall not try to send broadcast synchronously", []),
+    error;
 do_route(Mode, Acc, From, To, {broadcast, Payload} = Broadcast) ->
     ?DEBUG("from=~p, to=~p, broadcast=~p", [From, To, Broadcast]),
     #jid{ luser = LUser, lserver = LServer, lresource = LResource} = To,
@@ -666,8 +669,7 @@ ship_message(async, Pid, Message, Acc) ->
 ship_message(sync, Pid, Message, _Acc) ->
     % things like muc or pubsub might need a safety valve, in case of a netsplit
     % or parallelise calls on another level
-    gen_fsm:sync_send_event(Pid, Message, 1000).
-% all_state event, mauybe?
+    p1_fsm_old:sync_send_all_state_event(Pid, Message, 1000).
 
 -spec do_route_no_resource_presence_prv(From, To, Acc, Packet, Type, Reason) -> boolean() when
       From :: jid:jid(),
