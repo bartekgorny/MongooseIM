@@ -403,7 +403,7 @@ do_route(Host, Acc) ->
                     % run filter_local_packet before
                     case mongoose_packet_handler:filter_local_packet(Host, From, To, Acc, El) of
                         {ok, Acc1} ->
-                            ejabberd_sm:route(From, To, Acc, El);
+                            ejabberd_sm:route(From, To, Acc1, El);
                         {drop, Acc1} ->
                             Acc1
                     end
@@ -434,12 +434,17 @@ routing_mode(Acc) ->
 routing_mode(_, <<"error">>, _) -> async;
 routing_mode(<<"message">>, _, Acc) ->
     % unless they are addressed to self, then they may
-    F = jid:to_bare(jid:to_lower(mongoose_acc:from_jid(Acc))),
-    case jid:to_bare(jid:to_lower(mongoose_acc:to_jid(Acc))) of
-        F ->
-            async;
-        _ ->
-            sync
+    case mongoose_acc:get(c2s, origin_jid, undefined, Acc) of
+        undefined ->
+            async; % we don't know
+        OJid ->
+            Ous = jid:to_lus(OJid),
+            case jid:to_lus(mongoose_acc:to_jid(Acc)) of
+                Ous ->
+                    async;
+                _ ->
+                    sync
+            end
     end;
 routing_mode(_, _, _) -> async.
 
