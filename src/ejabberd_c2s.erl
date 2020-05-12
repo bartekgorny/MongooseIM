@@ -853,6 +853,7 @@ session_established({xmlstreamelement, El}, StateData) ->
             Acc0 = element_to_origin_accum(El1, StateData),
             Acc1 = mongoose_hooks:c2s_preprocessing_hook(StateData#state.server,
                                            Acc0, NewState),
+            mongoose_hooks:c2s_debug(StateData#state.server, Acc1, {out, FromJID, El}),
             case mongoose_acc:get(hook, result, undefined, Acc1) of
                 drop -> fsm_next_state(session_established, NewState);
                 _ -> process_outgoing_stanza(Acc1, NewState)
@@ -2507,6 +2508,7 @@ resend_csi_buffer(State) ->
 -spec ship_to_local_user(mongoose_acc:t(), packet(), state()) ->
     {ok | resume, mongoose_acc:t(), state()}.
 ship_to_local_user(Acc, Packet, State) ->
+    mongoose_hooks:c2s_debug(State#state.server, Acc, {in, Packet}),
     maybe_csi_inactive_optimisation(Acc, Packet, State).
 
 -spec maybe_csi_inactive_optimisation(mongoose_acc:t(), packet(), state()) ->

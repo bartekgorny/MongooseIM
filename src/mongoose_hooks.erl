@@ -44,6 +44,7 @@
 -export([c2s_broadcast_recipients/6,
          c2s_filter_packet/6,
          c2s_preprocessing_hook/3,
+         c2s_debug/3,
          c2s_presence_in/5,
          c2s_stream_features/2,
          c2s_unauthenticated_iq/4,
@@ -558,6 +559,13 @@ c2s_filter_packet(Server, Drop, State, Feature, To, Packet) ->
     Result :: mongoose_acc:t().
 c2s_preprocessing_hook(Server, Acc, State) ->
     ejabberd_hooks:run_fold(c2s_preprocessing_hook, Server, Acc, [State]).
+
+-spec c2s_debug(Server, Acc, Args) -> mongoose_acc:t() when
+    Server :: jid:server(),
+    Acc :: mongoose_acc:t(),
+    Args :: {out, jid:jid(), exml:element()} | {in, exml:element()}.
+c2s_debug(Server, Acc, Args) ->
+    ejabberd_hooks:run_fold(c2s_debug, Server, Acc, [Args]).
 
 -spec c2s_presence_in(Server, State, From, To, Packet) -> Result when
     Server :: jid:server(),
