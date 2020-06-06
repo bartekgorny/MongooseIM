@@ -5144,26 +5144,215 @@ var $elm$core$Task$perform = F2(
 				A2($elm$core$Task$map, toMessage, task)));
 	});
 var $elm$browser$Browser$element = _Browser_element;
-var $elm$core$Platform$Cmd$batch = _Platform_batch;
-var $elm$core$Platform$Cmd$none = $elm$core$Platform$Cmd$batch(_List_Nil);
+var $elm$json$Json$Encode$list = F2(
+	function (func, entries) {
+		return _Json_wrap(
+			A3(
+				$elm$core$List$foldl,
+				_Json_addEntry(func),
+				_Json_emptyArray(_Utils_Tuple0),
+				entries));
+	});
+var $author$project$Traffic$outPort = _Platform_outgoingPort(
+	'outPort',
+	function ($) {
+		var a = $.a;
+		var b = $.b;
+		return A2(
+			$elm$json$Json$Encode$list,
+			$elm$core$Basics$identity,
+			_List_fromArray(
+				[
+					$elm$core$Basics$identity(a),
+					$elm$core$Basics$identity(b)
+				]));
+	});
+var $elm$json$Json$Encode$object = function (pairs) {
+	return _Json_wrap(
+		A3(
+			$elm$core$List$foldl,
+			F2(
+				function (_v0, obj) {
+					var k = _v0.a;
+					var v = _v0.b;
+					return A3(_Json_addField, k, v, obj);
+				}),
+			_Json_emptyObject(_Utils_Tuple0),
+			pairs));
+};
+var $author$project$Traffic$emptyPayload = $elm$json$Json$Encode$object(_List_Nil);
+var $elm$json$Json$Encode$string = _Json_wrap;
+var $author$project$Traffic$simpleEvent = function (evt) {
+	return _Utils_Tuple2(
+		$elm$json$Json$Encode$string(evt),
+		$author$project$Traffic$emptyPayload);
+};
 var $author$project$Traffic$init = function (_v0) {
 	return _Utils_Tuple2(
-		{},
-		$elm$core$Platform$Cmd$none);
+		{
+			traced_jids: _List_fromArray(
+				['zzz', 'eee', 'aaa']),
+			tracing_all: false
+		},
+		$author$project$Traffic$outPort(
+			$author$project$Traffic$simpleEvent('get_status')));
+};
+var $author$project$Traffic$RecEvent = function (a) {
+	return {$: 'RecEvent', a: a};
 };
 var $elm$core$Platform$Sub$batch = _Platform_batch;
+var $elm$json$Json$Decode$value = _Json_decodeValue;
+var $author$project$Traffic$incPort = _Platform_incomingPort('incPort', $elm$json$Json$Decode$value);
 var $author$project$Traffic$subscriptions = function (_v0) {
-	return $elm$core$Platform$Sub$batch(_List_Nil);
+	return $elm$core$Platform$Sub$batch(
+		_List_fromArray(
+			[
+				$author$project$Traffic$incPort($author$project$Traffic$RecEvent)
+			]));
 };
-var $elm$json$Json$Encode$string = _Json_wrap;
-var $author$project$Traffic$testPort = _Platform_outgoingPort('testPort', $elm$core$Basics$identity);
+var $elm$json$Json$Encode$bool = _Json_wrap;
+var $elm$json$Json$Decode$decodeValue = _Json_run;
+var $elm$json$Json$Decode$field = _Json_decodeField;
+var $author$project$Traffic$decodeField = F3(
+	function (fieldname, decoder, v) {
+		return A2(
+			$elm$json$Json$Decode$decodeValue,
+			A2(
+				$elm$json$Json$Decode$field,
+				'payload',
+				A2($elm$json$Json$Decode$field, fieldname, decoder)),
+			v);
+	});
+var $elm$core$Debug$log = _Debug_log;
+var $elm$core$Platform$Cmd$batch = _Platform_batch;
+var $elm$core$Platform$Cmd$none = $elm$core$Platform$Cmd$batch(_List_Nil);
+var $elm$json$Json$Decode$string = _Json_decodeString;
+var $author$project$Traffic$handleNewTrace = F2(
+	function (v, model) {
+		var _v0 = A3($author$project$Traffic$decodeField, 'jid', $elm$json$Json$Decode$string, v);
+		if (_v0.$ === 'Ok') {
+			var jid = _v0.a;
+			return _Utils_Tuple2(
+				_Utils_update(
+					model,
+					{
+						traced_jids: A2($elm$core$List$cons, jid, model.traced_jids)
+					}),
+				$elm$core$Platform$Cmd$none);
+		} else {
+			var error = _v0.a;
+			var x = A2($elm$core$Debug$log, 'error', error);
+			return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
+		}
+	});
+var $elm$json$Json$Decode$bool = _Json_decodeBool;
+var $author$project$Traffic$handleStatus = F2(
+	function (v, model) {
+		var _v0 = A3($author$project$Traffic$decodeField, 'trace_all', $elm$json$Json$Decode$bool, v);
+		if (_v0.$ === 'Ok') {
+			var traceall = _v0.a;
+			return _Utils_Tuple2(
+				_Utils_update(
+					model,
+					{tracing_all: traceall}),
+				$elm$core$Platform$Cmd$none);
+		} else {
+			var error = _v0.a;
+			var x = A2($elm$core$Debug$log, 'error', error);
+			return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
+		}
+	});
+var $author$project$Traffic$handleEvent = F3(
+	function (ename, v, model) {
+		switch (ename) {
+			case 'status':
+				return A2($author$project$Traffic$handleStatus, v, model);
+			case 'new_trace':
+				return A2($author$project$Traffic$handleNewTrace, v, model);
+			case 'cleared_all':
+				return _Utils_Tuple2(
+					_Utils_update(
+						model,
+						{traced_jids: _List_Nil}),
+					$elm$core$Platform$Cmd$none);
+			default:
+				return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
+		}
+	});
+var $author$project$Traffic$outEvent = F2(
+	function (evtname, payload) {
+		return _Utils_Tuple2(
+			$elm$json$Json$Encode$string(evtname),
+			$elm$json$Json$Encode$object(payload));
+	});
 var $author$project$Traffic$update = F2(
 	function (msg, model) {
-		return _Utils_Tuple2(
-			model,
-			$author$project$Traffic$testPort(
-				$elm$json$Json$Encode$string('bzzz')));
+		switch (msg.$) {
+			case 'Test':
+				return _Utils_Tuple2(
+					model,
+					$author$project$Traffic$outPort(
+						_Utils_Tuple2(
+							$elm$json$Json$Encode$string('test'),
+							$elm$json$Json$Encode$string('bzzz'))));
+			case 'GetStatus':
+				return _Utils_Tuple2(
+					model,
+					$author$project$Traffic$outPort(
+						$author$project$Traffic$simpleEvent('get_status')));
+			case 'ClearAll':
+				return _Utils_Tuple2(
+					model,
+					$author$project$Traffic$outPort(
+						$author$project$Traffic$simpleEvent('clear_all')));
+			case 'SetStatus':
+				var st = msg.a;
+				if (st) {
+					return _Utils_Tuple2(
+						model,
+						$author$project$Traffic$outPort(
+							A2(
+								$author$project$Traffic$outEvent,
+								'trace_all',
+								_List_fromArray(
+									[
+										_Utils_Tuple2(
+										'value',
+										$elm$json$Json$Encode$bool(true))
+									]))));
+				} else {
+					return _Utils_Tuple2(
+						model,
+						$author$project$Traffic$outPort(
+							A2(
+								$author$project$Traffic$outEvent,
+								'trace_all',
+								_List_fromArray(
+									[
+										_Utils_Tuple2(
+										'value',
+										$elm$json$Json$Encode$bool(false))
+									]))));
+				}
+			default:
+				var v = msg.a;
+				var _v2 = A2(
+					$elm$json$Json$Decode$decodeValue,
+					A2($elm$json$Json$Decode$field, 'event', $elm$json$Json$Decode$string),
+					v);
+				if (_v2.$ === 'Ok') {
+					var eventName = _v2.a;
+					var z = A2($elm$core$Debug$log, 'v', eventName);
+					return A3($author$project$Traffic$handleEvent, eventName, v, model);
+				} else {
+					var error = _v2.a;
+					var x = A2($elm$core$Debug$log, 'error', error);
+					return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
+				}
+		}
 	});
+var $author$project$Traffic$ClearAll = {$: 'ClearAll'};
+var $author$project$Traffic$GetStatus = {$: 'GetStatus'};
 var $author$project$Traffic$Test = {$: 'Test'};
 var $elm$html$Html$button = _VirtualDom_node('button');
 var $elm$html$Html$div = _VirtualDom_node('div');
@@ -5184,14 +5373,109 @@ var $elm$html$Html$Events$onClick = function (msg) {
 		'click',
 		$elm$json$Json$Decode$succeed(msg));
 };
+var $author$project$Traffic$SetStatus = function (a) {
+	return {$: 'SetStatus', a: a};
+};
+var $author$project$Traffic$enableButton = function (is_enabled) {
+	if (is_enabled) {
+		return 'Disable';
+	} else {
+		return 'Enable';
+	}
+};
+var $elm$core$Basics$not = _Basics_not;
 var $elm$virtual_dom$VirtualDom$text = _VirtualDom_text;
 var $elm$html$Html$text = $elm$virtual_dom$VirtualDom$text;
+var $author$project$Traffic$showEnableButton = function (is_enabled) {
+	return A2(
+		$elm$html$Html$button,
+		_List_fromArray(
+			[
+				$elm$html$Html$Events$onClick(
+				$author$project$Traffic$SetStatus(!is_enabled))
+			]),
+		_List_fromArray(
+			[
+				$elm$html$Html$text(
+				$author$project$Traffic$enableButton(is_enabled))
+			]));
+};
+var $author$project$Traffic$enableLabel = function (is_enabled) {
+	if (is_enabled) {
+		return 'Enabled';
+	} else {
+		return 'Disabled';
+	}
+};
+var $author$project$Traffic$showEnabled = function (is_enabled) {
+	return A2(
+		$elm$html$Html$div,
+		_List_Nil,
+		_List_fromArray(
+			[
+				$elm$html$Html$text(
+				$author$project$Traffic$enableLabel(is_enabled))
+			]));
+};
+var $author$project$Traffic$showJid = function (jid) {
+	return A2(
+		$elm$html$Html$div,
+		_List_Nil,
+		_List_fromArray(
+			[
+				$elm$html$Html$text(jid)
+			]));
+};
+var $author$project$Traffic$viewJids = function (traced_jids) {
+	return A2(
+		$elm$html$Html$div,
+		_List_Nil,
+		_List_fromArray(
+			[
+				A2(
+				$elm$html$Html$div,
+				_List_Nil,
+				_List_fromArray(
+					[
+						$elm$html$Html$text('Now tracing')
+					])),
+				A2(
+				$elm$html$Html$div,
+				_List_Nil,
+				A2(
+					$elm$core$List$map,
+					$author$project$Traffic$showJid,
+					$elm$core$List$reverse(traced_jids)))
+			]));
+};
 var $author$project$Traffic$view = function (model) {
 	return A2(
 		$elm$html$Html$div,
 		_List_Nil,
 		_List_fromArray(
 			[
+				$author$project$Traffic$showEnabled(model.tracing_all),
+				$author$project$Traffic$showEnableButton(model.tracing_all),
+				A2(
+				$elm$html$Html$button,
+				_List_fromArray(
+					[
+						$elm$html$Html$Events$onClick($author$project$Traffic$GetStatus)
+					]),
+				_List_fromArray(
+					[
+						$elm$html$Html$text('check')
+					])),
+				A2(
+				$elm$html$Html$button,
+				_List_fromArray(
+					[
+						$elm$html$Html$Events$onClick($author$project$Traffic$ClearAll)
+					]),
+				_List_fromArray(
+					[
+						$elm$html$Html$text('clear all')
+					])),
 				A2(
 				$elm$html$Html$div,
 				_List_Nil,
@@ -5208,7 +5492,8 @@ var $author$project$Traffic$view = function (model) {
 				_List_fromArray(
 					[
 						$elm$html$Html$text('test')
-					]))
+					])),
+				$author$project$Traffic$viewJids(model.traced_jids)
 			]));
 };
 var $author$project$Traffic$main = $elm$browser$Browser$element(
