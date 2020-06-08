@@ -5408,6 +5408,14 @@ var $author$project$Traffic$update = F2(
 	});
 var $author$project$Traffic$ClearAll = {$: 'ClearAll'};
 var $elm$html$Html$button = _VirtualDom_node('button');
+var $elm$html$Html$Attributes$stringProperty = F2(
+	function (key, string) {
+		return A2(
+			_VirtualDom_property,
+			key,
+			$elm$json$Json$Encode$string(string));
+	});
+var $elm$html$Html$Attributes$class = $elm$html$Html$Attributes$stringProperty('className');
 var $elm$html$Html$div = _VirtualDom_node('div');
 var $elm$virtual_dom$VirtualDom$Normal = function (a) {
 	return {$: 'Normal', a: a};
@@ -5429,11 +5437,11 @@ var $elm$html$Html$Events$onClick = function (msg) {
 var $author$project$Traffic$SetStatus = function (a) {
 	return {$: 'SetStatus', a: a};
 };
-var $author$project$Traffic$enableButton = function (is_enabled) {
+var $author$project$Traffic$enableClass = function (is_enabled) {
 	if (is_enabled) {
-		return 'Disable';
+		return 'true';
 	} else {
-		return 'Enable';
+		return 'false';
 	}
 };
 var $elm$core$Basics$not = _Basics_not;
@@ -5441,33 +5449,26 @@ var $elm$virtual_dom$VirtualDom$text = _VirtualDom_text;
 var $elm$html$Html$text = $elm$virtual_dom$VirtualDom$text;
 var $author$project$Traffic$showEnableButton = function (is_enabled) {
 	return A2(
-		$elm$html$Html$button,
+		$elm$html$Html$div,
 		_List_fromArray(
 			[
-				$elm$html$Html$Events$onClick(
-				$author$project$Traffic$SetStatus(!is_enabled))
+				$elm$html$Html$Attributes$class('enabled')
 			]),
 		_List_fromArray(
 			[
-				$elm$html$Html$text(
-				$author$project$Traffic$enableButton(is_enabled))
-			]));
-};
-var $author$project$Traffic$enableLabel = function (is_enabled) {
-	if (is_enabled) {
-		return 'Enabled';
-	} else {
-		return 'Disabled';
-	}
-};
-var $author$project$Traffic$showEnabled = function (is_enabled) {
-	return A2(
-		$elm$html$Html$div,
-		_List_Nil,
-		_List_fromArray(
-			[
-				$elm$html$Html$text(
-				$author$project$Traffic$enableLabel(is_enabled))
+				A2(
+				$elm$html$Html$button,
+				_List_fromArray(
+					[
+						$elm$html$Html$Attributes$class(
+						$author$project$Traffic$enableClass(is_enabled)),
+						$elm$html$Html$Events$onClick(
+						$author$project$Traffic$SetStatus(!is_enabled))
+					]),
+				_List_fromArray(
+					[
+						$elm$html$Html$text('Tracing')
+					]))
 			]));
 };
 var $author$project$Traffic$SelectJid = function (a) {
@@ -5477,7 +5478,10 @@ var $elm$html$Html$a = _VirtualDom_node('a');
 var $author$project$Traffic$showJid = function (jid) {
 	return A2(
 		$elm$html$Html$div,
-		_List_Nil,
+		_List_fromArray(
+			[
+				$elm$html$Html$Attributes$class('jid')
+			]),
 		_List_fromArray(
 			[
 				A2(
@@ -5496,51 +5500,83 @@ var $author$project$Traffic$showJid = function (jid) {
 var $author$project$Traffic$viewJids = function (traced_jids) {
 	return A2(
 		$elm$html$Html$div,
-		_List_Nil,
+		_List_fromArray(
+			[
+				$elm$html$Html$Attributes$class('tracing')
+			]),
 		_List_fromArray(
 			[
 				A2(
 				$elm$html$Html$div,
-				_List_Nil,
 				_List_fromArray(
 					[
-						$elm$html$Html$text('Now tracing:')
+						$elm$html$Html$Attributes$class('label')
+					]),
+				_List_fromArray(
+					[
+						$elm$html$Html$text('Active accounts:')
 					])),
 				A2(
 				$elm$html$Html$div,
-				_List_Nil,
+				_List_fromArray(
+					[
+						$elm$html$Html$Attributes$class('jids')
+					]),
 				A2(
 					$elm$core$List$map,
 					$author$project$Traffic$showJid,
 					$elm$core$List$reverse(traced_jids)))
 			]));
 };
-var $elm$html$Html$pre = _VirtualDom_node('pre');
-var $author$project$Traffic$showStanza = function (stanza) {
+var $author$project$Traffic$showStanzaPart = function (p) {
 	return A2(
-		$elm$html$Html$pre,
-		_List_Nil,
+		$elm$html$Html$div,
 		_List_fromArray(
 			[
-				$elm$html$Html$text(stanza.stanza)
+				$elm$html$Html$Attributes$class('part')
+			]),
+		_List_fromArray(
+			[
+				$elm$html$Html$text(p)
 			]));
+};
+var $author$project$Traffic$showStanza = function (stanza) {
+	return A2(
+		$elm$html$Html$div,
+		_List_fromArray(
+			[
+				$elm$html$Html$Attributes$class('stanza ' + stanza.dir)
+			]),
+		A2(
+			$elm$core$List$map,
+			$author$project$Traffic$showStanzaPart,
+			A2($elm$core$String$split, '\n', stanza.stanza)));
 };
 var $author$project$Traffic$viewStanzas = function (stanzas) {
 	return A2(
 		$elm$html$Html$div,
-		_List_Nil,
+		_List_fromArray(
+			[
+				$elm$html$Html$Attributes$class('stanzas')
+			]),
 		_List_fromArray(
 			[
 				A2(
 				$elm$html$Html$div,
-				_List_Nil,
+				_List_fromArray(
+					[
+						$elm$html$Html$Attributes$class('label')
+					]),
 				_List_fromArray(
 					[
 						$elm$html$Html$text('Stanzas')
 					])),
 				A2(
 				$elm$html$Html$div,
-				_List_Nil,
+				_List_fromArray(
+					[
+						$elm$html$Html$Attributes$class('stanzalist')
+					]),
 				A2(
 					$elm$core$List$map,
 					$author$project$Traffic$showStanza,
@@ -5550,30 +5586,82 @@ var $author$project$Traffic$viewStanzas = function (stanzas) {
 var $author$project$Traffic$view = function (model) {
 	return A2(
 		$elm$html$Html$div,
-		_List_Nil,
 		_List_fromArray(
 			[
-				$author$project$Traffic$showEnabled(model.tracing),
-				$author$project$Traffic$showEnableButton(model.tracing),
+				$elm$html$Html$Attributes$class('all')
+			]),
+		_List_fromArray(
+			[
 				A2(
-				$elm$html$Html$button,
+				$elm$html$Html$div,
 				_List_fromArray(
 					[
-						$elm$html$Html$Events$onClick($author$project$Traffic$ClearAll)
+						$elm$html$Html$Attributes$class('top')
 					]),
 				_List_fromArray(
 					[
-						$elm$html$Html$text('clear all')
+						A2(
+						$elm$html$Html$div,
+						_List_fromArray(
+							[
+								$elm$html$Html$Attributes$class('header')
+							]),
+						_List_fromArray(
+							[
+								$elm$html$Html$text('MongooseIM traffic tracer')
+							])),
+						$author$project$Traffic$showEnableButton(model.tracing),
+						A2(
+						$elm$html$Html$button,
+						_List_fromArray(
+							[
+								$elm$html$Html$Attributes$class('clearButton'),
+								$elm$html$Html$Events$onClick($author$project$Traffic$ClearAll)
+							]),
+						_List_fromArray(
+							[
+								$elm$html$Html$text('clear all')
+							]))
 					])),
 				A2(
 				$elm$html$Html$div,
-				_List_Nil,
 				_List_fromArray(
 					[
-						$elm$html$Html$text(model.current_jid)
-					])),
-				$author$project$Traffic$viewJids(model.traced_jids),
-				$author$project$Traffic$viewStanzas(model.stanzas)
+						$elm$html$Html$Attributes$class('main')
+					]),
+				_List_fromArray(
+					[
+						A2(
+						$elm$html$Html$div,
+						_List_fromArray(
+							[
+								$elm$html$Html$Attributes$class('left')
+							]),
+						_List_fromArray(
+							[
+								$author$project$Traffic$viewJids(model.traced_jids)
+							])),
+						A2(
+						$elm$html$Html$div,
+						_List_fromArray(
+							[
+								$elm$html$Html$Attributes$class('right')
+							]),
+						_List_fromArray(
+							[
+								A2(
+								$elm$html$Html$div,
+								_List_fromArray(
+									[
+										$elm$html$Html$Attributes$class('current')
+									]),
+								_List_fromArray(
+									[
+										$elm$html$Html$text(model.current_jid)
+									])),
+								$author$project$Traffic$viewStanzas(model.stanzas)
+							]))
+					]))
 			]));
 };
 var $author$project$Traffic$main = $elm$browser$Browser$element(

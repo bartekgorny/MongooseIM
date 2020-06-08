@@ -51,6 +51,7 @@ groups() ->
 
 manage_test_cases() ->
     [
+        test_sending_byleco,
         discovering_support,
         get_block_list,
         add_user_to_blocklist,
@@ -121,6 +122,34 @@ end_per_testcase(CaseName, Config) ->
 %%--------------------------------------------------------------------
 %% Tests
 %%--------------------------------------------------------------------
+
+test_sending_byleco(Config) ->
+    escalus:fresh_story(
+    Config, [{alice, 1}, {bob, 1}, {carol, 1}],
+    fun(Alice, Bob, Carol) ->
+        lists:map(fun(_) -> justsend(Alice, Bob, Carol) end, lists:seq(1, 200)),
+        ok
+        end).
+
+justsend(A, B, C) ->
+    Wait = 1000,
+    message(A, B, tm()),
+    timer:sleep(Wait),
+    message(B, C, tm()),
+    timer:sleep(Wait),
+    message(C, A, tm()),
+    timer:sleep(Wait),
+    message(B, A, tm()),
+    timer:sleep(Wait),
+    message(C, B, tm()),
+    timer:sleep(Wait),
+    message(A, C, tm()),
+    timer:sleep(Wait),
+    ok.
+
+tm() ->
+    {_, T, _} = os:timestamp(),
+    integer_to_binary(T).
 
 discovering_support(Config) ->
     escalus:fresh_story(

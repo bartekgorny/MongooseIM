@@ -35,7 +35,6 @@ init _ = ({ tracing = False,
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
     case msg of 
---        Test -> (model, outPort ((Encode.string "test", Encode.string "bzzz")))
 --        GetStatus -> (model, outPort(simpleEvent "get_status"))
         ClearAll -> (model, outPort(simpleEvent "clear_all"))
         SetStatus st ->
@@ -116,49 +115,60 @@ outEvent evtname payload =
 
 view : Model -> Html Msg
 view model =
-    div [] [
-            showEnabled model.tracing,
+    div [class "all"][
+        div [class "top"][
+            div [class "header"][text "MongooseIM traffic tracer"],
+--            showEnabled model.tracing,
             showEnableButton model.tracing,
---            button [onClick GetStatus] [ text "check"],
-            button [onClick ClearAll] [ text "clear all"],
-            div [][text model.current_jid],
---            button [onClick Test] [ text "test"],
-            viewJids model.traced_jids,
-            viewStanzas model.stanzas
-           ]
+            button [class "clearButton", onClick ClearAll] [ text "clear all"]
+        ],
+        div [class "main"][
+            div [class "left"][
+                viewJids model.traced_jids
+            ],
+            div [class "right"][
+                div [class "current"][text model.current_jid],
+                viewStanzas model.stanzas
+            ]
+        ]
+    ]
+--    div [] [
+--            viewStanzas model.stanzas
+--           ]
 
 
 viewJids traced_jids =
-    div [] [
-        div [] [text "Now tracing:"],
-        div [] (List.map showJid (List.reverse traced_jids))
+    div [class "tracing"] [
+        div [class "label"] [text "Active accounts:"],
+        div [class "jids"] (List.map showJid (List.reverse traced_jids))
     ]
 
 showJid jid =
-    div [] [a [onClick (SelectJid jid)] [text jid]]
+    div [class "jid"] [a [onClick (SelectJid jid)] [text jid]]
 
-showEnabled is_enabled =
-    div [] [text (enableLabel is_enabled)]
-
-enableLabel is_enabled =
+enableClass is_enabled =
     case is_enabled of
-        True -> "Enabled"
-        False -> "Disabled"
+        True -> "true"
+        False -> "false"
 
 showEnableButton is_enabled =
-    button [onClick (SetStatus (not is_enabled))][ text (enableButton is_enabled)]
-
-enableButton is_enabled =
-    case is_enabled of
-        True -> "Disable"
-        False -> "Enable"
+    div [class "enabled"][
+        button [class (enableClass is_enabled),
+                onClick (SetStatus (not is_enabled))]
+                [ text "Tracing"]
+    ]
 
 viewStanzas stanzas =
-    div [] [
-        div [] [text "Stanzas"],
-        div [] (List.map showStanza (List.reverse stanzas))
+    div [class "stanzas"] [
+        div [class "label"] [text "Stanzas"],
+        div [class "stanzalist"] (List.map showStanza (List.reverse stanzas))
     ]
 
 
 showStanza stanza =
-    pre [] [text stanza.stanza]
+    div [class ("stanza " ++ stanza.dir)]
+        (List.map showStanzaPart (String.split "\n" stanza.stanza))
+
+showStanzaPart p =
+    div [class "part"][text p]
+

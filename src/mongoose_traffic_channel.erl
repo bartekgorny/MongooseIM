@@ -111,7 +111,7 @@ handle(<<"get_trace">>, {Payload}, State) ->
      State#state{current = Jid}};
 handle(<<"clear_all">>, _, State) ->
     {<<"cleared_all">>,
-     State#state{traces = clear_all(State#state.traces)}};
+     State#state{traces = #{}, current = <<>>}};
 handle(<<"clear">>, #{<<"jid">> := Jid}, State) ->
     {<<"cleared">>,
      #{<<"jid">> => Jid},
@@ -146,8 +146,6 @@ to_binary(#jid{} = Jid) -> jid:to_binary(Jid);
 to_binary(Jid) -> Jid.
 
 clear_trace(J, Traces) -> maps:put(J, queue:new(), Traces).
-
-clear_all(Traces) -> lists:foldl(fun(J, T) -> maps:put(J, queue:new(), T) end, #{}, maps:keys(Traces)).
 
 is_current(J, #state{current = J}) -> true;
 is_current(_, _)                   -> false.
