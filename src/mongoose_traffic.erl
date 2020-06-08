@@ -53,7 +53,7 @@ trace_traffic(Acc, {in, {_From, To, El}}) ->
     Acc.
 
 traffic(Dir, Account, El) ->
-    Sacc = jid:to_binary(Account),
+    Sacc = jid:to_binary(jid:to_lower(Account)),
     St = exml:to_pretty_iolist(El),
     case whereis(?MODULE) of
         undefined -> ok;

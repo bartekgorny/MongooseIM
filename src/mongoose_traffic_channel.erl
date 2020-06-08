@@ -20,7 +20,7 @@
 -define(LISTENER, ?MODULE).
 -define(MAX_ITEMS, 500).
 
--record(state, {traces = #{}, traceall = true}).
+-record(state, {traces = #{}, tracing = true, current = <<>>}).
 % TODO default false, frontend should remember and set on reconnection
 
 %%--------------------------------------------------------------------
@@ -70,19 +70,25 @@ websocket_handle(Any, State) ->
     {ok, State}.
 
 % Other messages from the system are handled here.
+websocket_info({message, _Dir, _J, _Stanza}, #state{tracing = false} = State) ->
+    {ok, State};
 websocket_info({message, Dir, J, Stanza}, State) ->
-    case is_traced(J, State) of
-        true ->
-%%            publish_message(J, Dir, Stanza),
-            {Traces1, IsNew} = record_item(Dir, J, Stanza, State#state.traces),
-            State1 = State#state{traces = Traces1},
-            case IsNew of
-                true -> {reply, reply(<<"new_trace">>, #{<<"jid">> => J}), State1};
-                false -> {ok, State}
-            end;
-        false ->
-            {ok, State}
-    end;
+    {Traces1, IsNew} = record_item(Dir, J, Stanza, State#state.traces),
+    State1 = State#state{traces = Traces1},
+    Announcement = case IsNew of
+                       true -> [reply(<<"new_trace">>, #{<<"jid">> => J})];
+                       false -> []
+                   end,
+    Msg = case is_current(J, State) of
+              true ->
+                  M = reply(<<"message">>, #{<<"dir">> => atom_to_binary(Dir, utf8),
+                                             <<"stanza">> => Stanza
+                                            }),
+                  [M];
+              false ->
+                  []
+          end,
+    {reply, Announcement ++ Msg, State1};
 websocket_info(stop, State) ->
     {stop, State};
 websocket_info(Info, State) ->
@@ -95,13 +101,14 @@ handle({Json}, State) ->
 
 handle(<<"get_status">>, _, State) ->
     return_status(State);
-handle(<<"trace_all">>, {Payload}, State) ->
+handle(<<"trace_flag">>, {Payload}, State) ->
      #{<<"value">> := Flag} = maps:from_list(Payload),
-     return_status(State#state{traceall = Flag});
-handle(<<"get_trace">>, #{<<"jid">> := Jid}, State) ->
+     return_status(State#state{tracing = Flag});
+handle(<<"get_trace">>, {Payload}, State) ->
+    #{<<"jid">> := Jid} = maps:from_list(Payload),
     {<<"get_trace">>,
-     #{<<"jid">> => Jid, <<"trace">> => maps:get(Jid, State#state.traces, [])},
-     State};
+     #{<<"jid">> => Jid, <<"trace">> => format_trace(maps:get(Jid, State#state.traces, []))},
+     State#state{current = Jid}};
 handle(<<"clear_all">>, _, State) ->
     {<<"cleared_all">>,
      State#state{traces = clear_all(State#state.traces)}};
@@ -120,7 +127,7 @@ handle(Event, Payload, State) ->
 
 return_status(State) ->
     {<<"status">>,
-     #{<<"trace_all">> => State#state.traceall},
+     #{<<"trace_flag">> => State#state.tracing},
      State}.
 
 reply(Event) ->
@@ -142,8 +149,8 @@ clear_trace(J, Traces) -> maps:put(J, queue:new(), Traces).
 
 clear_all(Traces) -> lists:foldl(fun(J, T) -> maps:put(J, queue:new(), T) end, #{}, maps:keys(Traces)).
 
-is_traced(_, #state{traceall = true}) -> true;
-is_traced(J, #state{traces = Traces}) -> maps:is_key(J, Traces).
+is_current(J, #state{current = J}) -> true;
+is_current(_, _)                   -> false.
 
 record_item(Dir, J, Stanza, Traces) ->
     {Tr, IsNew} = case maps:get(J, Traces, undefined) of
@@ -158,15 +165,9 @@ record_item(Dir, J, Stanza, Traces) ->
           end,
     {maps:put(J, Tr2, Traces), IsNew}.
 
-publish_message(_J, _Dir, _Stanza) ->
-    % somehow send to an appropriate channel
-    ok.
-
-announce_new_trace(_J) ->
-    % so that you know there is something to watch (if you are tracing all)
-    ok.
-
-
+format_trace(Trace) ->
+    lists:map(fun({Dir, Stanza}) -> #{<<"dir">> => atom_to_binary(Dir, utf8), <<"stanza">> => Stanza} end,
+              lists:reverse(queue:to_list(Trace))).
 
 %%add_trace(J, Traces) ->
 %%    case maps:get(J, Traces, none) of
@@ -189,8 +190,8 @@ announce_new_trace(_J) ->
 %%    {reply, ok, State#state{traces =  clear_all(State#state.traces)}};
 %%handle_call(untrace_all, _From, State) ->
 %%    {reply, ok, State#state{traces = #{}}};
-%%handle_call({traceall, Flag}, _From, State) ->
-%%    {reply, ok, State#state{traceall = Flag}};
+%%handle_call({tracing, Flag}, _From, State) ->
+%%    {reply, ok, State#state{tracing = Flag}};
 %%handle_call(_Request, _From, State) ->
 %%    {reply, ok, State}.
 %%

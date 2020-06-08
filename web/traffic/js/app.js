@@ -51,8 +51,12 @@ function initialise() {
       socket.pendingHeartbeatRef = null
       clearInterval(socket.heartbeatTimer)
       socket.heartbeatTimer = setInterval(() => sendHeartbeat(socket), 2000)
-      if(!initialised) start_app()
-      initialised = true
+      if(initialised) {
+          app.ports.incPort.send({"event":"cleared_all", "payload":{}})
+      }else{
+          start_app()
+          initialised = true
+      }
 
     };
     socket.onmessage = function(event) {
