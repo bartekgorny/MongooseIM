@@ -5320,7 +5320,7 @@ var $author$project$Traffic$handleEvent = F3(
 				return _Utils_Tuple2(
 					_Utils_update(
 						model,
-						{stanzas: _List_Nil, traced_jids: _List_Nil}),
+						{current_jid: '', stanzas: _List_Nil, traced_jids: _List_Nil}),
 					$elm$core$Platform$Cmd$none);
 			case 'get_trace':
 				return A2($author$project$Traffic$handleGetTrace, v, model);

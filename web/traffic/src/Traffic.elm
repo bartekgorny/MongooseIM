@@ -58,7 +58,7 @@ handleEvent ename v model =
     case ename of
         "status" -> handleStatus v model
         "new_trace" -> handleNewTrace v model
-        "cleared_all" -> ({model | traced_jids = [], stanzas = []}, Cmd.none)
+        "cleared_all" -> ({model | traced_jids = [], stanzas = [], current_jid = ""}, Cmd.none)
         "get_trace" -> handleGetTrace v model
         "message" -> handleMessage v model
         _ -> (model, Cmd.none)
