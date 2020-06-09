@@ -51,7 +51,8 @@ groups() ->
 
 manage_test_cases() ->
     [
-        test_sending_byleco,
+        test_sending_short,
+        test_sending_long,
         discovering_support,
         get_block_list,
         add_user_to_blocklist,
@@ -123,7 +124,15 @@ end_per_testcase(CaseName, Config) ->
 %% Tests
 %%--------------------------------------------------------------------
 
-test_sending_byleco(Config) ->
+test_sending_short(Config) ->
+    escalus:fresh_story(
+        Config, [{alice, 1}, {bob, 1}, {carol, 1}],
+        fun(Alice, Bob, Carol) ->
+            lists:map(fun(_) -> justsend(Alice, Bob, Carol) end, lists:seq(1, 10)),
+            ok
+        end).
+
+test_sending_long(Config) ->
     escalus:fresh_story(
     Config, [{alice, 1}, {bob, 1}, {carol, 1}],
     fun(Alice, Bob, Carol) ->

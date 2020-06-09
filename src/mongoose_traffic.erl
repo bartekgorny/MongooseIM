@@ -11,11 +11,14 @@
 -include("mongoose.hrl").
 -include("jlib.hrl").
 
-%% API
+%% gen_mod API
 -export([start/2, stop/1]).
+%% hook handler
 -export([trace_traffic/2]).
-
+%% gen_server
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2]).
+%% cowboy handler for serving main page
+-export([init/2]).
 
 -define(SERVER, ?MODULE).
 
@@ -80,3 +83,17 @@ handle_cast({message, _, _, _} = Msg, State) ->
 
 handle_info({'DOWN', _, _, Pid, _}, State) ->
     {noreply, lists:delete(Pid, State)}.
+
+init(Req, State) ->
+    {ok, Cwd} = file:get_cwd(),
+    Base = Cwd ++ "/web/traffic",
+    File = case cowboy_req:path_info(Req) of
+               [] -> "session.html";
+               P -> filename:join(P)
+           end,
+    Path = filename:join(Base, File),
+    Size = filelib:file_size(Path),
+    Req1 = cowboy_req:reply(200,
+                            #{},
+                            {sendfile, 0, Size, Path}, Req),
+    {ok, Req1, State}.
