@@ -5206,9 +5206,13 @@ var $author$project$Traffic$subscriptions = function (_v0) {
 				$author$project$Traffic$incPort($author$project$Traffic$RecEvent)
 			]));
 };
-var $elm$json$Json$Encode$bool = _Json_wrap;
 var $elm$json$Json$Decode$decodeValue = _Json_run;
 var $elm$json$Json$Decode$field = _Json_decodeField;
+var $author$project$Traffic$clearAll = function (model) {
+	return _Utils_update(
+		model,
+		{current_jid: '', stanzas: _List_Nil, traced_jids: _List_Nil});
+};
 var $author$project$Traffic$decodeField = F3(
 	function (fieldname, decoder, v) {
 		return A2(
@@ -5293,22 +5297,52 @@ var $author$project$Traffic$handleNewTrace = F2(
 		}
 	});
 var $elm$json$Json$Decode$bool = _Json_decodeBool;
-var $author$project$Traffic$handleStatus = F2(
-	function (v, model) {
-		var _v0 = A3($author$project$Traffic$decodeField, 'trace_flag', $elm$json$Json$Decode$bool, v);
-		if (_v0.$ === 'Ok') {
-			var trace_flag = _v0.a;
-			return _Utils_Tuple2(
-				_Utils_update(
-					model,
-					{tracing: trace_flag}),
-				$elm$core$Platform$Cmd$none);
+var $author$project$Traffic$handleError = F3(
+	function (func, model, result) {
+		if (result.$ === 'Ok') {
+			var res = result.a;
+			return A2(func, res, model);
 		} else {
-			var error = _v0.a;
+			var error = result.a;
 			var x = A2($elm$core$Debug$log, 'error', error);
 			return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
 		}
 	});
+var $author$project$Traffic$handleStatusOk = F2(
+	function (trace_flag, model) {
+		return _Utils_Tuple2(
+			_Utils_update(
+				model,
+				{tracing: trace_flag}),
+			$elm$core$Platform$Cmd$none);
+	});
+var $author$project$Traffic$handleStatus = F2(
+	function (v, model) {
+		return A3(
+			$author$project$Traffic$handleError,
+			$author$project$Traffic$handleStatusOk,
+			model,
+			A3($author$project$Traffic$decodeField, 'trace_flag', $elm$json$Json$Decode$bool, v));
+	});
+var $elm$json$Json$Encode$bool = _Json_wrap;
+var $author$project$Traffic$outEvent = F2(
+	function (evtname, payload) {
+		return _Utils_Tuple2(
+			$elm$json$Json$Encode$string(evtname),
+			$elm$json$Json$Encode$object(payload));
+	});
+var $author$project$Traffic$setTraceEvent = function (st) {
+	return $author$project$Traffic$outPort(
+		A2(
+			$author$project$Traffic$outEvent,
+			'trace_flag',
+			_List_fromArray(
+				[
+					_Utils_Tuple2(
+					'value',
+					$elm$json$Json$Encode$bool(st))
+				])));
+};
 var $author$project$Traffic$handleEvent = F3(
 	function (ename, v, model) {
 		switch (ename) {
@@ -5318,23 +5352,19 @@ var $author$project$Traffic$handleEvent = F3(
 				return A2($author$project$Traffic$handleNewTrace, v, model);
 			case 'cleared_all':
 				return _Utils_Tuple2(
-					_Utils_update(
-						model,
-						{current_jid: '', stanzas: _List_Nil, traced_jids: _List_Nil}),
+					$author$project$Traffic$clearAll(model),
 					$elm$core$Platform$Cmd$none);
 			case 'get_trace':
 				return A2($author$project$Traffic$handleGetTrace, v, model);
 			case 'message':
 				return A2($author$project$Traffic$handleMessage, v, model);
+			case 'reinitialise':
+				return _Utils_Tuple2(
+					$author$project$Traffic$clearAll(model),
+					$author$project$Traffic$setTraceEvent(model.tracing));
 			default:
 				return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
 		}
-	});
-var $author$project$Traffic$outEvent = F2(
-	function (evtname, payload) {
-		return _Utils_Tuple2(
-			$elm$json$Json$Encode$string(evtname),
-			$elm$json$Json$Encode$object(payload));
 	});
 var $author$project$Traffic$update = F2(
 	function (msg, model) {
@@ -5346,33 +5376,9 @@ var $author$project$Traffic$update = F2(
 						$author$project$Traffic$simpleEvent('clear_all')));
 			case 'SetStatus':
 				var st = msg.a;
-				if (st) {
-					return _Utils_Tuple2(
-						model,
-						$author$project$Traffic$outPort(
-							A2(
-								$author$project$Traffic$outEvent,
-								'trace_flag',
-								_List_fromArray(
-									[
-										_Utils_Tuple2(
-										'value',
-										$elm$json$Json$Encode$bool(true))
-									]))));
-				} else {
-					return _Utils_Tuple2(
-						model,
-						$author$project$Traffic$outPort(
-							A2(
-								$author$project$Traffic$outEvent,
-								'trace_flag',
-								_List_fromArray(
-									[
-										_Utils_Tuple2(
-										'value',
-										$elm$json$Json$Encode$bool(false))
-									]))));
-				}
+				return _Utils_Tuple2(
+					model,
+					$author$project$Traffic$setTraceEvent(st));
 			case 'SelectJid':
 				var jid = msg.a;
 				return _Utils_Tuple2(
@@ -5391,16 +5397,16 @@ var $author$project$Traffic$update = F2(
 								]))));
 			default:
 				var v = msg.a;
-				var _v2 = A2(
+				var _v1 = A2(
 					$elm$json$Json$Decode$decodeValue,
 					A2($elm$json$Json$Decode$field, 'event', $elm$json$Json$Decode$string),
 					v);
-				if (_v2.$ === 'Ok') {
-					var eventName = _v2.a;
+				if (_v1.$ === 'Ok') {
+					var eventName = _v1.a;
 					var z = A2($elm$core$Debug$log, 'v', eventName);
 					return A3($author$project$Traffic$handleEvent, eventName, v, model);
 				} else {
-					var error = _v2.a;
+					var error = _v1.a;
 					var x = A2($elm$core$Debug$log, 'error', error);
 					return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
 				}

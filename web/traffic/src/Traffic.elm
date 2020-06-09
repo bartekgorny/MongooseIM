@@ -1,4 +1,4 @@
-port module Traffic exposing (main, handleEvent)
+port module Traffic exposing (main)
 
 import Html exposing (..)
 import Html.Attributes exposing (..)
@@ -19,11 +19,12 @@ type alias Model = { tracing : Bool,
                      stanzas : List Stanza}
 
 type Msg = SetStatus Bool
---           | Test
---           | GetStatus
            | ClearAll
            | SelectJid String
            | RecEvent Encode.Value
+
+
+-- UPDATE
 
 init : () -> (Model, Cmd Msg)
 init _ = ({ tracing = False,
@@ -35,12 +36,9 @@ init _ = ({ tracing = False,
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
     case msg of 
---        GetStatus -> (model, outPort(simpleEvent "get_status"))
         ClearAll -> (model, outPort(simpleEvent "clear_all"))
         SetStatus st ->
-            case st of
-                True -> (model, outPort(outEvent "trace_flag" [("value", Encode.bool True)]))
-                False -> (model, outPort(outEvent "trace_flag" [("value", Encode.bool False)]))
+                (model, setTraceEvent st)
         SelectJid jid -> ({model | current_jid = jid}, outPort(outEvent "get_trace" [("jid", Encode.string jid)]))
         RecEvent v ->
             case Decode.decodeValue (Decode.field "event" Decode.string) v of
@@ -52,24 +50,40 @@ update msg model =
                     (model, Cmd.none)
 
 
+-- INCOMING
+
 handleEvent : String -> Decode.Value -> Model -> (Model, Cmd Msg)
 handleEvent ename v model =
     case ename of
         "status" -> handleStatus v model
         "new_trace" -> handleNewTrace v model
-        "cleared_all" -> ({model | traced_jids = [], stanzas = [], current_jid = ""}, Cmd.none)
+        "cleared_all" -> (clearAll model, Cmd.none)
         "get_trace" -> handleGetTrace v model
         "message" -> handleMessage v model
+        "reinitialise" -> (clearAll model, setTraceEvent model.tracing) -- server was probably restarted, we set our status
         _ -> (model, Cmd.none)
 
-handleStatus v model =
-    case v |> decodeField "trace_flag" Decode.bool of
-        Ok trace_flag ->
-            ({model | tracing = trace_flag}, Cmd.none)
-        Err error ->
-            let x = Debug.log "error" error in
-            (model, Cmd.none)
+clearAll : Model -> Model
+clearAll model = {model | traced_jids = [], stanzas = [], current_jid = ""}
 
+setTraceEvent : Bool -> Cmd Msg
+setTraceEvent st = outPort(outEvent "trace_flag" [("value", Encode.bool st)])
+
+
+handleStatus : Decode.Value -> Model -> (Model, Cmd Msg)
+handleStatus v model =
+    v |> decodeField "trace_flag" Decode.bool
+      |> handleError handleStatusOk model
+
+handleStatusOk trace_flag model = ({model | tracing = trace_flag}, Cmd.none)
+--    case v |> decodeField "trace_flag" Decode.bool of
+--        Ok trace_flag ->
+--            ({model | tracing = trace_flag}, Cmd.none)
+--        Err error ->
+--            let x = Debug.log "error" error in
+--            (model, Cmd.none)
+
+handleNewTrace : Decode.Value -> Model -> (Model, Cmd Msg)
 handleNewTrace v model =
     case v |> decodeField "jid" Decode.string of
         Ok jid ->
@@ -78,6 +92,7 @@ handleNewTrace v model =
             let x = Debug.log "error" error in
             (model, Cmd.none)
 
+handleGetTrace : Decode.Value -> Model -> (Model, Cmd Msg)
 handleGetTrace v model =
     case v |> decodeField "trace" (Decode.list decodeStanza) of
         Ok stanzas ->
@@ -86,6 +101,7 @@ handleGetTrace v model =
             let x = Debug.log "error" error in
             (model, Cmd.none)
 
+handleMessage : Decode.Value -> Model -> (Model, Cmd Msg)
 handleMessage v model =
     case v |> Decode.decodeValue (Decode.field "payload" decodeStanza)  of
         Ok stanza ->
@@ -94,11 +110,22 @@ handleMessage v model =
             let x = Debug.log "error" error in
             (model, Cmd.none)
 
+handleError : (a -> Model -> (Model, Cmd Msg)) -> Model -> Result Decode.Error a -> (Model, Cmd Msg)
+handleError func model result =
+    case result of
+        Ok res ->
+            func res model
+        Err error ->
+            let x = Debug.log "error" error in
+            (model, Cmd.none)
 
 decodeStanza = Decode.map2 Stanza (Decode.field "dir" Decode.string) (Decode.field "stanza" Decode.string)
 
 decodeField fieldname decoder v =
     Decode.decodeValue  (Decode.field "payload" (Decode.field fieldname decoder)) v
+
+
+-- COMMUNICATION TOOLS
 
 subscriptions : Model -> Sub Msg
 subscriptions _ = Sub.batch [incPort RecEvent]
@@ -107,18 +134,24 @@ port outPort : (Encode.Value, Encode.Value) -> Cmd msg
 port incPort : (Encode.Value -> msg) -> Sub msg
 
 emptyPayload = Encode.object []
+
+simpleEvent : String -> (Encode.Value, Encode.Value)
 simpleEvent evt = (Encode.string evt, emptyPayload)
 
+
+outEvent : String -> List (String, Encode.Value) -> (Encode.Value, Encode.Value)
 outEvent evtname payload =
     (Encode.string evtname,
      Encode.object payload)
+
+
+-- VIEW
 
 view : Model -> Html Msg
 view model =
     div [class "all"][
         div [class "top"][
             div [class "header"][text "MongooseIM traffic tracer"],
---            showEnabled model.tracing,
             showEnableButton model.tracing,
             button [class "clearButton", onClick ClearAll] [ text "clear all"]
         ],
@@ -132,9 +165,6 @@ view model =
             ]
         ]
     ]
---    div [] [
---            viewStanzas model.stanzas
---           ]
 
 
 viewJids traced_jids =
