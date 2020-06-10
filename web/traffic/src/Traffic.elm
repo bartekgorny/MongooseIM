@@ -12,15 +12,19 @@ main = Browser.element {init = init, view = view, update = update, subscriptions
 
 -- TYPES
 
+type alias Jid = String
 type alias Stanza = { dir : String, stanza : String}
 type alias Model = { tracing : Bool,
-                     traced_jids : List String,
-                     current_jid : String,
+                     traced_jids : List Jid,
+                     current_jid : Jid,
                      stanzas : List Stanza}
+
+type alias DecodeResult a = Result Decode.Error a
+type alias UpdateResult = (Model, Cmd Msg)
 
 type Msg = SetStatus Bool
            | ClearAll
-           | SelectJid String
+           | SelectJid Jid
            | RecEvent Encode.Value
 
 
@@ -33,7 +37,7 @@ init _ = ({ tracing = False,
             stanzas = []},
           outPort(simpleEvent "get_status")) -- server default may change
 
-update : Msg -> Model -> (Model, Cmd Msg)
+update : Msg -> Model -> UpdateResult
 update msg model =
     case msg of 
         ClearAll -> (model, outPort(simpleEvent "clear_all"))
@@ -52,7 +56,7 @@ update msg model =
 
 -- INCOMING
 
-handleEvent : String -> Decode.Value -> Model -> (Model, Cmd Msg)
+handleEvent : String -> Decode.Value -> Model -> UpdateResult
 handleEvent ename v model =
     case ename of
         "status" -> handleStatus v model
@@ -70,57 +74,60 @@ setTraceEvent : Bool -> Cmd Msg
 setTraceEvent st = outPort(outEvent "trace_flag" [("value", Encode.bool st)])
 
 
-handleStatus : Decode.Value -> Model -> (Model, Cmd Msg)
+handleStatus : Decode.Value -> Model -> UpdateResult
 handleStatus v model =
-    v |> decodeField "trace_flag" Decode.bool
-      |> handleError handleStatusOk model
+    (v, model)
+    |> handleDecodedValue (decodeField "trace_flag" Decode.bool)
+                          handleStatusOk
 
-handleStatusOk trace_flag model = ({model | tracing = trace_flag}, Cmd.none)
---    case v |> decodeField "trace_flag" Decode.bool of
---        Ok trace_flag ->
---            ({model | tracing = trace_flag}, Cmd.none)
---        Err error ->
---            let x = Debug.log "error" error in
---            (model, Cmd.none)
 
-handleNewTrace : Decode.Value -> Model -> (Model, Cmd Msg)
+handleDecodedValue : (Decode.Value -> DecodeResult a) -- decoder
+                      -> (Model -> a -> UpdateResult) -- handler if ok
+                      -> (Decode.Value, Model)
+                      -> UpdateResult
+handleDecodedValue decoder handler (v, model) =
+    case decoder v of
+        Ok res -> handler model res
+        Err error ->
+            let x = Debug.log "error" error in
+            (model, Cmd.none)
+
+handleStatusOk : Model -> Bool -> UpdateResult
+handleStatusOk model trace_flag = ({model | tracing = trace_flag}, Cmd.none)
+
+handleNewTrace : Decode.Value -> Model -> UpdateResult
 handleNewTrace v model =
-    case v |> decodeField "jid" Decode.string of
-        Ok jid ->
-            ({model | traced_jids = jid :: model.traced_jids}, Cmd.none)
-        Err error ->
-            let x = Debug.log "error" error in
-            (model, Cmd.none)
+    (v, model)
+    |> handleDecodedValue (decodeField "jid" Decode.string )
+                          handleNewTraceOk
 
-handleGetTrace : Decode.Value -> Model -> (Model, Cmd Msg)
+handleNewTraceOk : Model -> Jid -> UpdateResult
+handleNewTraceOk model jid =
+    ({model | traced_jids = jid :: model.traced_jids}, Cmd.none)
+
+handleGetTrace : Decode.Value -> Model -> UpdateResult
 handleGetTrace v model =
-    case v |> decodeField "trace" (Decode.list decodeStanza) of
-        Ok stanzas ->
-            ({model | stanzas = stanzas}, Cmd.none)
-        Err error ->
-            let x = Debug.log "error" error in
-            (model, Cmd.none)
+    (v, model)
+    |> handleDecodedValue (decodeField "trace" (Decode.list decodeStanza))
+                          handleDecodedValueOk
 
-handleMessage : Decode.Value -> Model -> (Model, Cmd Msg)
+handleDecodedValueOk : Model -> List Stanza -> UpdateResult
+handleDecodedValueOk model stanzas =
+    ({model | stanzas = stanzas}, Cmd.none)
+
+handleMessage : Decode.Value -> Model -> UpdateResult
 handleMessage v model =
-    case v |> Decode.decodeValue (Decode.field "payload" decodeStanza)  of
-        Ok stanza ->
-            ({model | stanzas = stanza :: model.stanzas}, Cmd.none)
-        Err error ->
-            let x = Debug.log "error" error in
-            (model, Cmd.none)
+    (v, model)
+    |> handleDecodedValue (Decode.decodeValue (Decode.field "payload" decodeStanza))
+                          handleMessageOk
 
-handleError : (a -> Model -> (Model, Cmd Msg)) -> Model -> Result Decode.Error a -> (Model, Cmd Msg)
-handleError func model result =
-    case result of
-        Ok res ->
-            func res model
-        Err error ->
-            let x = Debug.log "error" error in
-            (model, Cmd.none)
+handleMessageOk : Model -> Stanza -> UpdateResult
+handleMessageOk model stanza =
+    ({model | stanzas = stanza :: model.stanzas}, Cmd.none)
 
 decodeStanza = Decode.map2 Stanza (Decode.field "dir" Decode.string) (Decode.field "stanza" Decode.string)
 
+decodeField : String -> Decode.Decoder a -> Decode.Value -> DecodeResult a
 decodeField fieldname decoder v =
     Decode.decodeValue  (Decode.field "payload" (Decode.field fieldname decoder)) v
 

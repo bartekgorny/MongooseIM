@@ -5233,83 +5233,83 @@ var $author$project$Traffic$decodeStanza = A3(
 	$author$project$Traffic$Stanza,
 	A2($elm$json$Json$Decode$field, 'dir', $elm$json$Json$Decode$string),
 	A2($elm$json$Json$Decode$field, 'stanza', $elm$json$Json$Decode$string));
-var $elm$json$Json$Decode$list = _Json_decodeList;
 var $elm$core$Debug$log = _Debug_log;
 var $elm$core$Platform$Cmd$batch = _Platform_batch;
 var $elm$core$Platform$Cmd$none = $elm$core$Platform$Cmd$batch(_List_Nil);
-var $author$project$Traffic$handleGetTrace = F2(
-	function (v, model) {
-		var _v0 = A3(
-			$author$project$Traffic$decodeField,
-			'trace',
-			$elm$json$Json$Decode$list($author$project$Traffic$decodeStanza),
-			v);
-		if (_v0.$ === 'Ok') {
-			var stanzas = _v0.a;
-			return _Utils_Tuple2(
-				_Utils_update(
-					model,
-					{stanzas: stanzas}),
-				$elm$core$Platform$Cmd$none);
+var $author$project$Traffic$handleDecodedValue = F3(
+	function (decoder, handler, _v0) {
+		var v = _v0.a;
+		var model = _v0.b;
+		var _v1 = decoder(v);
+		if (_v1.$ === 'Ok') {
+			var res = _v1.a;
+			return A2(handler, model, res);
 		} else {
-			var error = _v0.a;
+			var error = _v1.a;
 			var x = A2($elm$core$Debug$log, 'error', error);
 			return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
 		}
+	});
+var $author$project$Traffic$handleDecodedValueOk = F2(
+	function (model, stanzas) {
+		return _Utils_Tuple2(
+			_Utils_update(
+				model,
+				{stanzas: stanzas}),
+			$elm$core$Platform$Cmd$none);
+	});
+var $elm$json$Json$Decode$list = _Json_decodeList;
+var $author$project$Traffic$handleGetTrace = F2(
+	function (v, model) {
+		return A3(
+			$author$project$Traffic$handleDecodedValue,
+			A2(
+				$author$project$Traffic$decodeField,
+				'trace',
+				$elm$json$Json$Decode$list($author$project$Traffic$decodeStanza)),
+			$author$project$Traffic$handleDecodedValueOk,
+			_Utils_Tuple2(v, model));
+	});
+var $author$project$Traffic$handleMessageOk = F2(
+	function (model, stanza) {
+		return _Utils_Tuple2(
+			_Utils_update(
+				model,
+				{
+					stanzas: A2($elm$core$List$cons, stanza, model.stanzas)
+				}),
+			$elm$core$Platform$Cmd$none);
 	});
 var $author$project$Traffic$handleMessage = F2(
 	function (v, model) {
-		var _v0 = A2(
-			$elm$json$Json$Decode$decodeValue,
-			A2($elm$json$Json$Decode$field, 'payload', $author$project$Traffic$decodeStanza),
-			v);
-		if (_v0.$ === 'Ok') {
-			var stanza = _v0.a;
-			return _Utils_Tuple2(
-				_Utils_update(
-					model,
-					{
-						stanzas: A2($elm$core$List$cons, stanza, model.stanzas)
-					}),
-				$elm$core$Platform$Cmd$none);
-		} else {
-			var error = _v0.a;
-			var x = A2($elm$core$Debug$log, 'error', error);
-			return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
-		}
+		return A3(
+			$author$project$Traffic$handleDecodedValue,
+			$elm$json$Json$Decode$decodeValue(
+				A2($elm$json$Json$Decode$field, 'payload', $author$project$Traffic$decodeStanza)),
+			$author$project$Traffic$handleMessageOk,
+			_Utils_Tuple2(v, model));
+	});
+var $author$project$Traffic$handleNewTraceOk = F2(
+	function (model, jid) {
+		return _Utils_Tuple2(
+			_Utils_update(
+				model,
+				{
+					traced_jids: A2($elm$core$List$cons, jid, model.traced_jids)
+				}),
+			$elm$core$Platform$Cmd$none);
 	});
 var $author$project$Traffic$handleNewTrace = F2(
 	function (v, model) {
-		var _v0 = A3($author$project$Traffic$decodeField, 'jid', $elm$json$Json$Decode$string, v);
-		if (_v0.$ === 'Ok') {
-			var jid = _v0.a;
-			return _Utils_Tuple2(
-				_Utils_update(
-					model,
-					{
-						traced_jids: A2($elm$core$List$cons, jid, model.traced_jids)
-					}),
-				$elm$core$Platform$Cmd$none);
-		} else {
-			var error = _v0.a;
-			var x = A2($elm$core$Debug$log, 'error', error);
-			return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
-		}
+		return A3(
+			$author$project$Traffic$handleDecodedValue,
+			A2($author$project$Traffic$decodeField, 'jid', $elm$json$Json$Decode$string),
+			$author$project$Traffic$handleNewTraceOk,
+			_Utils_Tuple2(v, model));
 	});
 var $elm$json$Json$Decode$bool = _Json_decodeBool;
-var $author$project$Traffic$handleError = F3(
-	function (func, model, result) {
-		if (result.$ === 'Ok') {
-			var res = result.a;
-			return A2(func, res, model);
-		} else {
-			var error = result.a;
-			var x = A2($elm$core$Debug$log, 'error', error);
-			return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
-		}
-	});
 var $author$project$Traffic$handleStatusOk = F2(
-	function (trace_flag, model) {
+	function (model, trace_flag) {
 		return _Utils_Tuple2(
 			_Utils_update(
 				model,
@@ -5319,10 +5319,10 @@ var $author$project$Traffic$handleStatusOk = F2(
 var $author$project$Traffic$handleStatus = F2(
 	function (v, model) {
 		return A3(
-			$author$project$Traffic$handleError,
+			$author$project$Traffic$handleDecodedValue,
+			A2($author$project$Traffic$decodeField, 'trace_flag', $elm$json$Json$Decode$bool),
 			$author$project$Traffic$handleStatusOk,
-			model,
-			A3($author$project$Traffic$decodeField, 'trace_flag', $elm$json$Json$Decode$bool, v));
+			_Utils_Tuple2(v, model));
 	});
 var $elm$json$Json$Encode$bool = _Json_wrap;
 var $author$project$Traffic$outEvent = F2(
