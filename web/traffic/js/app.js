@@ -67,6 +67,9 @@ function initialise() {
             handle_event(e)
         }
     };
+    socket.onclose = event => {
+        app.ports.incPort.send({"event":"connection_lost", "payload":{}})
+    };
 }
 
 initialise()

@@ -20,8 +20,7 @@
 -define(LISTENER, ?MODULE).
 -define(MAX_ITEMS, 500).
 
--record(state, {traces = #{}, tracing = true, current = <<>>}).
-% TODO default false, frontend should remember and set on reconnection
+-record(state, {traces = #{}, tracing = false, current = <<>>}).
 
 %%--------------------------------------------------------------------
 %% Common callbacks for all cowboy behaviours

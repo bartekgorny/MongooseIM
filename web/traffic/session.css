@@ -70,3 +70,13 @@ button {
 
 .in {margin-left:200px; color: darkred}
 .out {margin-left:5px; color: darkgreen}
+
+.connection_state {
+    float: right;
+    font-size:smaller;
+    color: darkgreen;
+}
+
+.connection_state .lost {
+    color: red;
+}

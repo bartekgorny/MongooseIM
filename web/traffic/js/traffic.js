@@ -5144,6 +5144,7 @@ var $elm$core$Task$perform = F2(
 				A2($elm$core$Task$map, toMessage, task)));
 	});
 var $elm$browser$Browser$element = _Browser_element;
+var $author$project$Traffic$Open = {$: 'Open'};
 var $elm$json$Json$Encode$list = F2(
 	function (func, entries) {
 		return _Json_wrap(
@@ -5189,7 +5190,7 @@ var $author$project$Traffic$simpleEvent = function (evt) {
 };
 var $author$project$Traffic$init = function (_v0) {
 	return _Utils_Tuple2(
-		{current_jid: '', stanzas: _List_Nil, traced_jids: _List_Nil, tracing: false},
+		{conn_state: $author$project$Traffic$Open, current_jid: '', stanzas: _List_Nil, traced_jids: _List_Nil, tracing: false},
 		$author$project$Traffic$outPort(
 			$author$project$Traffic$simpleEvent('get_status')));
 };
@@ -5208,6 +5209,7 @@ var $author$project$Traffic$subscriptions = function (_v0) {
 };
 var $elm$json$Json$Decode$decodeValue = _Json_run;
 var $elm$json$Json$Decode$field = _Json_decodeField;
+var $author$project$Traffic$Lost = {$: 'Lost'};
 var $author$project$Traffic$clearAll = function (model) {
 	return _Utils_update(
 		model,
@@ -5360,8 +5362,17 @@ var $author$project$Traffic$handleEvent = F3(
 				return A2($author$project$Traffic$handleMessage, v, model);
 			case 'reinitialise':
 				return _Utils_Tuple2(
-					$author$project$Traffic$clearAll(model),
+					$author$project$Traffic$clearAll(
+						_Utils_update(
+							model,
+							{conn_state: $author$project$Traffic$Open})),
 					$author$project$Traffic$setTraceEvent(model.tracing));
+			case 'connection_lost':
+				return _Utils_Tuple2(
+					_Utils_update(
+						model,
+						{conn_state: $author$project$Traffic$Lost}),
+					$elm$core$Platform$Cmd$none);
 			default:
 				return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
 		}
@@ -5440,6 +5451,45 @@ var $elm$html$Html$Events$onClick = function (msg) {
 		'click',
 		$elm$json$Json$Decode$succeed(msg));
 };
+var $author$project$Traffic$connStateClass = function (state) {
+	if (state.$ === 'Lost') {
+		return 'lost';
+	} else {
+		return '';
+	}
+};
+var $author$project$Traffic$connStateLabel = function (state) {
+	if (state.$ === 'Open') {
+		return 'connection open';
+	} else {
+		return 'trying to reconnect...';
+	}
+};
+var $elm$virtual_dom$VirtualDom$text = _VirtualDom_text;
+var $elm$html$Html$text = $elm$virtual_dom$VirtualDom$text;
+var $author$project$Traffic$showConnState = function (model) {
+	return A2(
+		$elm$html$Html$div,
+		_List_fromArray(
+			[
+				$elm$html$Html$Attributes$class('connection_state')
+			]),
+		_List_fromArray(
+			[
+				A2(
+				$elm$html$Html$div,
+				_List_fromArray(
+					[
+						$elm$html$Html$Attributes$class(
+						$author$project$Traffic$connStateClass(model.conn_state))
+					]),
+				_List_fromArray(
+					[
+						$elm$html$Html$text(
+						$author$project$Traffic$connStateLabel(model.conn_state))
+					]))
+			]));
+};
 var $author$project$Traffic$SetStatus = function (a) {
 	return {$: 'SetStatus', a: a};
 };
@@ -5451,8 +5501,6 @@ var $author$project$Traffic$enableClass = function (is_enabled) {
 	}
 };
 var $elm$core$Basics$not = _Basics_not;
-var $elm$virtual_dom$VirtualDom$text = _VirtualDom_text;
-var $elm$html$Html$text = $elm$virtual_dom$VirtualDom$text;
 var $author$project$Traffic$showEnableButton = function (is_enabled) {
 	return A2(
 		$elm$html$Html$div,
@@ -5627,7 +5675,8 @@ var $author$project$Traffic$view = function (model) {
 						_List_fromArray(
 							[
 								$elm$html$Html$text('clear all')
-							]))
+							])),
+						$author$project$Traffic$showConnState(model)
 					])),
 				A2(
 				$elm$html$Html$div,

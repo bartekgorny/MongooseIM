@@ -12,12 +12,17 @@ main = Browser.element {init = init, view = view, update = update, subscriptions
 
 -- TYPES
 
+
+type ConnectionState = Open
+                       | Lost
+
 type alias Jid = String
 type alias Stanza = { dir : String, stanza : String}
 type alias Model = { tracing : Bool,
                      traced_jids : List Jid,
                      current_jid : Jid,
-                     stanzas : List Stanza}
+                     stanzas : List Stanza,
+                     conn_state : ConnectionState}
 
 type alias DecodeResult a = Result Decode.Error a
 type alias UpdateResult = (Model, Cmd Msg)
@@ -34,7 +39,8 @@ init : () -> (Model, Cmd Msg)
 init _ = ({ tracing = False,
             traced_jids = [],
             current_jid = "",
-            stanzas = []},
+            stanzas = [],
+            conn_state = Open},
           outPort(simpleEvent "get_status")) -- server default may change
 
 update : Msg -> Model -> UpdateResult
@@ -64,7 +70,8 @@ handleEvent ename v model =
         "cleared_all" -> (clearAll model, Cmd.none)
         "get_trace" -> handleGetTrace v model
         "message" -> handleMessage v model
-        "reinitialise" -> (clearAll model, setTraceEvent model.tracing) -- server was probably restarted, we set our status
+        "reinitialise" -> (clearAll ({model | conn_state = Open}), setTraceEvent model.tracing) -- server was probably restarted, we set our status
+        "connection_lost" -> ({model | conn_state = Lost}, Cmd.none)
         _ -> (model, Cmd.none)
 
 clearAll : Model -> Model
@@ -160,7 +167,8 @@ view model =
         div [class "top"][
             div [class "header"][text "MongooseIM traffic tracer"],
             showEnableButton model.tracing,
-            button [class "clearButton", onClick ClearAll] [ text "clear all"]
+            button [class "clearButton", onClick ClearAll] [ text "clear all"],
+            showConnState model
         ],
         div [class "main"][
             div [class "left"][
@@ -173,6 +181,21 @@ view model =
         ]
     ]
 
+showConnState model =
+    div [class ("connection_state")][
+        div [class (connStateClass model.conn_state)]
+            [text (connStateLabel model.conn_state)]
+    ]
+
+connStateClass state =
+    case state of
+        Lost -> "lost"
+        _ -> ""
+
+connStateLabel state =
+    case state of
+        Open -> "connection open"
+        Lost -> "trying to reconnect..."
 
 viewJids traced_jids =
     div [class "tracing"] [
