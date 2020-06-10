@@ -43,7 +43,7 @@ function  connectionState(socket){
 
 
 function initialise() {
-    // TODO it survives server restart, but does not start properly if loaded for the first time when server is down
+    // TODO pass the port somehow from the server
     socket = new WebSocket("ws://localhost:5111/ws-traffic")
     console.log(socket)
     socket.onopen = function(e) {
