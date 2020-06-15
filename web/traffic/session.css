@@ -1,5 +1,7 @@
 html, body, .all, main, .main {height: 100%;}
 
+.hidden {display: none}
+
 .all {
     width: 1000px;
     margin: 0 auto;
@@ -77,6 +79,6 @@ button {
     color: darkgreen;
 }
 
-.connection_state .lost {
+.problem {
     color: red;
 }

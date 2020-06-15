@@ -19,6 +19,7 @@
 
 -define(LISTENER, ?MODULE).
 -define(MAX_ITEMS, 500).
+-define(MAX_ACCOUNTS, 100).
 
 -record(state, {traces = #{}, tracing = false, current = <<>>}).
 
@@ -71,28 +72,47 @@ websocket_handle(Any, State) ->
 % Other messages from the system are handled here.
 websocket_info({message, _Dir, _J, _Stanza}, #state{tracing = false} = State) ->
     {ok, State};
-websocket_info({message, Dir, J, Stanza}, State) ->
+websocket_info({message, Dir, J, Stanza} = Message, State) ->
     {Traces1, IsNew} = record_item(Dir, J, Stanza, State#state.traces),
-    State1 = State#state{traces = Traces1},
-    Announcement = case IsNew of
-                       true -> [reply(<<"new_trace">>, #{<<"jid">> => J})];
-                       false -> []
-                   end,
-    Msg = case is_current(J, State) of
-              true ->
-                  M = reply(<<"message">>, #{<<"dir">> => atom_to_binary(Dir, utf8),
-                                             <<"stanza">> => Stanza
-                                            }),
-                  [M];
-              false ->
-                  []
-          end,
-    {reply, Announcement ++ Msg, State1};
+    case maps:size(Traces1) of
+        N when N > ?MAX_ACCOUNTS ->
+            reset_and_stop(State);
+        _ ->
+            store_stanza_and_reply(Traces1, IsNew, Message, State)
+    end;
 websocket_info(stop, State) ->
     {stop, State};
 websocket_info(Info, State) ->
     ?DEBUG("unknown info: ~p", [Info]),
     {ok, State}.
+
+reset_and_stop(State) ->
+    State1 = State#state{tracing = false, traces = #{}},
+    M = reply(<<"error">>, #{<<"reason">> => <<"too_many_accounts">>}),
+    {reply, M, State1}.
+
+store_stanza_and_reply(Traces1, IsNew, {message, Dir, J, Stanza}, State) ->
+    State1 = State#state{traces = Traces1},
+    Announcement = maybe_announce_new(IsNew, J),
+    Msg = maybe_send_current(Dir, J, Stanza, State),
+    {reply, Announcement ++ Msg, State1}.
+
+maybe_announce_new(true, J) ->
+    [reply(<<"new_trace">>, #{<<"jid">> => J})];
+maybe_announce_new(false, _) ->
+    [].
+
+maybe_send_current(Dir, J, Stanza, State) ->
+    case is_current(J, State) of
+        true ->
+            M = reply(<<"message">>, #{<<"dir">> => atom_to_binary(Dir, utf8),
+                                             <<"stanza">> => Stanza
+                  }),
+            [M];
+        false ->
+            []
+    end.
+
 
 handle({Json}, State) ->
     M = maps:from_list(Json),

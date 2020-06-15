@@ -22,10 +22,14 @@ type alias Model = { tracing : Bool,
                      traced_jids : List Jid,
                      current_jid : Jid,
                      stanzas : List Stanza,
+                     announcement : Announcement,
                      conn_state : ConnectionState}
 
 type alias DecodeResult a = Result Decode.Error a
 type alias UpdateResult = (Model, Cmd Msg)
+
+type Announcement = Empty
+                    | Error String
 
 type Msg = SetStatus Bool
            | ClearAll
@@ -40,6 +44,7 @@ init _ = ({ tracing = False,
             traced_jids = [],
             current_jid = "",
             stanzas = [],
+            announcement = Empty,
             conn_state = Open},
           outPort(simpleEvent "get_status")) -- server default may change
 
@@ -68,6 +73,10 @@ handleEvent ename v model =
         "status" -> handleStatus v model
         "new_trace" -> handleNewTrace v model
         "cleared_all" -> (clearAll model, Cmd.none)
+        "error" -> (model
+                    |> unTrace
+                    |> showErrorMessage v,
+                    Cmd.none)
         "get_trace" -> handleGetTrace v model
         "message" -> handleMessage v model
         "reinitialise" -> (clearAll ({model | conn_state = Open}), setTraceEvent model.tracing) -- server was probably restarted, we set our status
@@ -75,7 +84,7 @@ handleEvent ename v model =
         _ -> (model, Cmd.none)
 
 clearAll : Model -> Model
-clearAll model = {model | traced_jids = [], stanzas = [], current_jid = ""}
+clearAll model = {model | traced_jids = [], stanzas = [], current_jid = "", announcement = Empty}
 
 setTraceEvent : Bool -> Cmd Msg
 setTraceEvent st = outPort(outEvent "trace_flag" [("value", Encode.bool st)])
@@ -100,7 +109,9 @@ handleDecodedValue decoder handler (v, model) =
             (model, Cmd.none)
 
 handleStatusOk : Model -> Bool -> UpdateResult
-handleStatusOk model trace_flag = ({model | tracing = trace_flag}, Cmd.none)
+handleStatusOk model trace_flag = ({model | tracing = trace_flag, announcement = Empty}, Cmd.none)
+
+unTrace model = {model | tracing = False}
 
 handleNewTrace : Decode.Value -> Model -> UpdateResult
 handleNewTrace v model =
@@ -116,11 +127,11 @@ handleGetTrace : Decode.Value -> Model -> UpdateResult
 handleGetTrace v model =
     (v, model)
     |> handleDecodedValue (decodeField "trace" (Decode.list decodeStanza))
-                          handleDecodedValueOk
+                          handleGetTraceOk
 
-handleDecodedValueOk : Model -> List Stanza -> UpdateResult
-handleDecodedValueOk model stanzas =
-    ({model | stanzas = stanzas}, Cmd.none)
+handleGetTraceOk : Model -> List Stanza -> UpdateResult
+handleGetTraceOk model stanzas =
+    ({model | stanzas = stanzas, announcement = Empty}, Cmd.none)
 
 handleMessage : Decode.Value -> Model -> UpdateResult
 handleMessage v model =
@@ -138,6 +149,11 @@ decodeField : String -> Decode.Decoder a -> Decode.Value -> DecodeResult a
 decodeField fieldname decoder v =
     Decode.decodeValue  (Decode.field "payload" (Decode.field fieldname decoder)) v
 
+
+showErrorMessage v model =
+    case decodeField "reason" Decode.string v of
+        Ok reason -> {model | announcement = Error reason}
+        _ -> model
 
 -- COMMUNICATION TOOLS
 
@@ -176,10 +192,17 @@ view model =
             ],
             div [class "right"][
                 div [class "current"][text model.current_jid],
+                viewAnnouncement model.announcement,
                 viewStanzas model.stanzas
             ]
         ]
     ]
+
+viewAnnouncement ann =
+    case ann of
+        Empty -> div [class "hidden"][]
+        Error "too_many_accounts" -> div [class "problem"] [text "Too many jids traced, tracing disabled"]
+        Error reason -> div [class "problem"] [text reason]
 
 showConnState model =
     div [class ("connection_state")][
@@ -189,7 +212,7 @@ showConnState model =
 
 connStateClass state =
     case state of
-        Lost -> "lost"
+        Lost -> "problem"
         _ -> ""
 
 connStateLabel state =

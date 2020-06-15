@@ -5144,6 +5144,7 @@ var $elm$core$Task$perform = F2(
 				A2($elm$core$Task$map, toMessage, task)));
 	});
 var $elm$browser$Browser$element = _Browser_element;
+var $author$project$Traffic$Empty = {$: 'Empty'};
 var $author$project$Traffic$Open = {$: 'Open'};
 var $elm$json$Json$Encode$list = F2(
 	function (func, entries) {
@@ -5190,7 +5191,7 @@ var $author$project$Traffic$simpleEvent = function (evt) {
 };
 var $author$project$Traffic$init = function (_v0) {
 	return _Utils_Tuple2(
-		{conn_state: $author$project$Traffic$Open, current_jid: '', stanzas: _List_Nil, traced_jids: _List_Nil, tracing: false},
+		{announcement: $author$project$Traffic$Empty, conn_state: $author$project$Traffic$Open, current_jid: '', stanzas: _List_Nil, traced_jids: _List_Nil, tracing: false},
 		$author$project$Traffic$outPort(
 			$author$project$Traffic$simpleEvent('get_status')));
 };
@@ -5213,7 +5214,7 @@ var $author$project$Traffic$Lost = {$: 'Lost'};
 var $author$project$Traffic$clearAll = function (model) {
 	return _Utils_update(
 		model,
-		{current_jid: '', stanzas: _List_Nil, traced_jids: _List_Nil});
+		{announcement: $author$project$Traffic$Empty, current_jid: '', stanzas: _List_Nil, traced_jids: _List_Nil});
 };
 var $author$project$Traffic$decodeField = F3(
 	function (fieldname, decoder, v) {
@@ -5252,12 +5253,12 @@ var $author$project$Traffic$handleDecodedValue = F3(
 			return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
 		}
 	});
-var $author$project$Traffic$handleDecodedValueOk = F2(
+var $author$project$Traffic$handleGetTraceOk = F2(
 	function (model, stanzas) {
 		return _Utils_Tuple2(
 			_Utils_update(
 				model,
-				{stanzas: stanzas}),
+				{announcement: $author$project$Traffic$Empty, stanzas: stanzas}),
 			$elm$core$Platform$Cmd$none);
 	});
 var $elm$json$Json$Decode$list = _Json_decodeList;
@@ -5269,7 +5270,7 @@ var $author$project$Traffic$handleGetTrace = F2(
 				$author$project$Traffic$decodeField,
 				'trace',
 				$elm$json$Json$Decode$list($author$project$Traffic$decodeStanza)),
-			$author$project$Traffic$handleDecodedValueOk,
+			$author$project$Traffic$handleGetTraceOk,
 			_Utils_Tuple2(v, model));
 	});
 var $author$project$Traffic$handleMessageOk = F2(
@@ -5315,7 +5316,7 @@ var $author$project$Traffic$handleStatusOk = F2(
 		return _Utils_Tuple2(
 			_Utils_update(
 				model,
-				{tracing: trace_flag}),
+				{announcement: $author$project$Traffic$Empty, tracing: trace_flag}),
 			$elm$core$Platform$Cmd$none);
 	});
 var $author$project$Traffic$handleStatus = F2(
@@ -5345,6 +5346,28 @@ var $author$project$Traffic$setTraceEvent = function (st) {
 					$elm$json$Json$Encode$bool(st))
 				])));
 };
+var $author$project$Traffic$Error = function (a) {
+	return {$: 'Error', a: a};
+};
+var $author$project$Traffic$showErrorMessage = F2(
+	function (v, model) {
+		var _v0 = A3($author$project$Traffic$decodeField, 'reason', $elm$json$Json$Decode$string, v);
+		if (_v0.$ === 'Ok') {
+			var reason = _v0.a;
+			return _Utils_update(
+				model,
+				{
+					announcement: $author$project$Traffic$Error(reason)
+				});
+		} else {
+			return model;
+		}
+	});
+var $author$project$Traffic$unTrace = function (model) {
+	return _Utils_update(
+		model,
+		{tracing: false});
+};
 var $author$project$Traffic$handleEvent = F3(
 	function (ename, v, model) {
 		switch (ename) {
@@ -5355,6 +5378,13 @@ var $author$project$Traffic$handleEvent = F3(
 			case 'cleared_all':
 				return _Utils_Tuple2(
 					$author$project$Traffic$clearAll(model),
+					$elm$core$Platform$Cmd$none);
+			case 'error':
+				return _Utils_Tuple2(
+					A2(
+						$author$project$Traffic$showErrorMessage,
+						v,
+						$author$project$Traffic$unTrace(model)),
 					$elm$core$Platform$Cmd$none);
 			case 'get_trace':
 				return A2($author$project$Traffic$handleGetTrace, v, model);
@@ -5453,7 +5483,7 @@ var $elm$html$Html$Events$onClick = function (msg) {
 };
 var $author$project$Traffic$connStateClass = function (state) {
 	if (state.$ === 'Lost') {
-		return 'lost';
+		return 'problem';
 	} else {
 		return '';
 	}
@@ -5524,6 +5554,42 @@ var $author$project$Traffic$showEnableButton = function (is_enabled) {
 						$elm$html$Html$text('Tracing')
 					]))
 			]));
+};
+var $author$project$Traffic$viewAnnouncement = function (ann) {
+	if (ann.$ === 'Empty') {
+		return A2(
+			$elm$html$Html$div,
+			_List_fromArray(
+				[
+					$elm$html$Html$Attributes$class('hidden')
+				]),
+			_List_Nil);
+	} else {
+		if (ann.a === 'too_many_accounts') {
+			return A2(
+				$elm$html$Html$div,
+				_List_fromArray(
+					[
+						$elm$html$Html$Attributes$class('problem')
+					]),
+				_List_fromArray(
+					[
+						$elm$html$Html$text('Too many jids traced, tracing disabled')
+					]));
+		} else {
+			var reason = ann.a;
+			return A2(
+				$elm$html$Html$div,
+				_List_fromArray(
+					[
+						$elm$html$Html$Attributes$class('problem')
+					]),
+				_List_fromArray(
+					[
+						$elm$html$Html$text(reason)
+					]));
+		}
+	}
 };
 var $author$project$Traffic$SelectJid = function (a) {
 	return {$: 'SelectJid', a: a};
@@ -5714,6 +5780,7 @@ var $author$project$Traffic$view = function (model) {
 									[
 										$elm$html$Html$text(model.current_jid)
 									])),
+								$author$project$Traffic$viewAnnouncement(model.announcement),
 								$author$project$Traffic$viewStanzas(model.stanzas)
 							]))
 					]))
