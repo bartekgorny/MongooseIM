@@ -607,6 +607,7 @@ wait_for_feature_after_auth({xmlstreamelement,
                          #xmlel{name = <<"resume">>} = El}, StateData) ->
     maybe_resume_session(wait_for_feature_after_auth, El, StateData);
 wait_for_feature_after_auth({xmlstreamelement, El}, StateData) ->
+    mongoose_hooks:c2s_debug(StateData#state.server, no_acc, {out, StateData#state.jid, El}),
     case jlib:iq_query_info(El) of
         #iq{type = set, xmlns = ?NS_BIND, sub_el = SubEl} = IQ ->
             R1 = xml:get_path_s(SubEl, [{elem, <<"resource">>}, cdata]),
@@ -657,16 +658,19 @@ wait_for_feature_after_auth(_, StateData) ->
                              State :: state()) -> fsm_return().
 wait_for_session_or_sm({xmlstreamelement,
                         #xmlel{name = <<"enable">>} = El}, StateData) ->
+    mongoose_hooks:c2s_debug(StateData#state.server, no_acc, {out, StateData#state.jid, El}),
     maybe_enable_stream_mgmt(wait_for_session_or_sm, El, StateData);
 
 wait_for_session_or_sm({xmlstreamelement,
                         #xmlel{name = <<"r">>} = El}, StateData) ->
+    mongoose_hooks:c2s_debug(StateData#state.server, no_acc, {out, StateData#state.jid, El}),
     maybe_send_sm_ack(xml:get_tag_attr_s(<<"xmlns">>, El),
                       StateData#state.stream_mgmt,
                       StateData#state.stream_mgmt_in,
                       wait_for_session_or_sm, StateData);
 
 wait_for_session_or_sm({xmlstreamelement, El}, StateData0) ->
+    mongoose_hooks:c2s_debug(StateData0#state.server, no_acc, {out, StateData0#state.jid, El}),
     StateData = maybe_increment_sm_incoming(StateData0#state.stream_mgmt,
                                             StateData0),
     case jlib:iq_query_info(El) of
@@ -1623,6 +1627,7 @@ send_element_from_server_jid(Acc, StateData, #xmlel{} = El) ->
 send_element(Acc, El, #state{server = Server} = StateData) ->
     Acc1 = mongoose_hooks:xmpp_send_element(Server, Acc, El),
     Res = do_send_element(El, StateData),
+    mongoose_hooks:c2s_debug(Server, Acc, {in, El}),
     mongoose_acc:set(c2s, send_result, Res, Acc1).
 
 do_send_element(El, #state{sockmod = SockMod} = StateData)
@@ -2508,7 +2513,6 @@ resend_csi_buffer(State) ->
 -spec ship_to_local_user(mongoose_acc:t(), packet(), state()) ->
     {ok | resume, mongoose_acc:t(), state()}.
 ship_to_local_user(Acc, Packet, State) ->
-    mongoose_hooks:c2s_debug(State#state.server, Acc, {in, Packet}),
     maybe_csi_inactive_optimisation(Acc, Packet, State).
 
 -spec maybe_csi_inactive_optimisation(mongoose_acc:t(), packet(), state()) ->

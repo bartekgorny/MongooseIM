@@ -3,7 +3,7 @@ html, body, .all, main, .main {height: 100%;}
 .hidden {display: none}
 
 .all {
-    width: 1000px;
+    width: 80%;
     margin: 0 auto;
     font-family: sans-serif;
     margin-top: 20px;
@@ -21,13 +21,13 @@ html, body, .all, main, .main {height: 100%;}
 
 .left {
     float: left;
-    width: 350px;
+    width: 45%;
 }
 
 .right {
     height: 100%;
     float:left;
-    width: 645px;
+    width: 55%;
 }
 
 .enabled {
@@ -53,7 +53,7 @@ button {
 
 .tracing .label {margin: 10px 0;}
 .jids {font-size: smaller;}
-.jids .jid {margin-bottom: 3px;}
+.jids .jid {margin-bottom: 3px;overflow:hidden;}
 
 .right .current {height:20px; margin:10px;font-weight:bold;}
 .stanzas .label {display: none;}

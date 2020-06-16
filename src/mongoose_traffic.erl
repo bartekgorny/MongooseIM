@@ -51,10 +51,19 @@ hooks(Host) ->
 trace_traffic(Acc, {out, From, El}) ->
     traffic(out, From, El),
     Acc;
-trace_traffic(Acc, {in, {_From, To, El}}) ->
+trace_traffic(Acc, {in, El}) ->
+    To = case exml_query:attr(El, <<"to">>) of
+             undefined -> mongoose_acc:to_jid(Acc);
+             J -> jid:from_binary(J)
+         end,
     traffic(in, To, El),
     Acc.
+%%trace_traffic(Acc, {in, {_From, To, El}}) ->
+%%    traffic(in, To, El),
+%%    Acc.
 
+traffic(_Dir, undefined, _El) ->
+    ok;
 traffic(Dir, Account, El) ->
     Sacc = jid:to_binary(jid:to_lower(Account)),
     St = exml:to_pretty_iolist(El),

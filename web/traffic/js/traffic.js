@@ -5191,7 +5191,15 @@ var $author$project$Traffic$simpleEvent = function (evt) {
 };
 var $author$project$Traffic$init = function (_v0) {
 	return _Utils_Tuple2(
-		{announcement: $author$project$Traffic$Empty, conn_state: $author$project$Traffic$Open, current_jid: '', stanzas: _List_Nil, traced_jids: _List_Nil, tracing: false},
+		{
+			announcement: $author$project$Traffic$Empty,
+			conn_state: $author$project$Traffic$Open,
+			current_jid: '',
+			stanzas: _List_Nil,
+			traced_jids: _List_fromArray(
+				['asdfasdfasdfadafasdfasdfasdfdfasdfasdfsadfdsakdfkkfdfksadsasdfasdflkskds']),
+			tracing: false
+		},
 		$author$project$Traffic$outPort(
 			$author$project$Traffic$simpleEvent('get_status')));
 };

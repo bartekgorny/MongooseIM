@@ -143,6 +143,9 @@ handleMessageOk : Model -> Stanza -> UpdateResult
 handleMessageOk model stanza =
     ({model | stanzas = stanza :: model.stanzas}, Cmd.none)
 
+
+-- SOME USEFUL DECODERS
+
 decodeStanza = Decode.map2 Stanza (Decode.field "dir" Decode.string) (Decode.field "stanza" Decode.string)
 
 decodeField : String -> Decode.Decoder a -> Decode.Value -> DecodeResult a
