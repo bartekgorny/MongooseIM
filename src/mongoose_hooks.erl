@@ -563,7 +563,7 @@ c2s_preprocessing_hook(Server, Acc, State) ->
 -spec c2s_debug(Server, Acc, Args) -> mongoose_acc:t() when
     Server :: jid:server(),
     Acc :: mongoose_acc:t(),
-    Args :: {out, jid:jid(), exml:element()} | {in, exml:element()}.
+    Args :: {out, jid:jid(), exml:element()} | {in, {jid:jid(), jid:jid(), exml:element()}}.
 c2s_debug(Server, Acc, Args) ->
     ejabberd_hooks:run_fold(c2s_debug, Server, Acc, [Args]).
 

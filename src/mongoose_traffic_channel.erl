@@ -51,8 +51,6 @@ websocket_init(Opts) ->
 % Called when a text message arrives.
 websocket_handle({text, Msg}, State) ->
     case handle(jiffy:decode(Msg), State) of
-        {ok, State1} ->
-            {reply, <<"ok">>, State1};
         {Event, State1} ->
             {reply, reply(Event), State1};
         {Event, Payload, State1} ->
