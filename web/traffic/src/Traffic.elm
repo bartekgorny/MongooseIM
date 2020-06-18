@@ -19,7 +19,7 @@ type ConnectionState = Open
 type alias Jid = String
 type alias Pid = String
 type alias NewTrace = {pid : Pid, bare_jid : Jid, full_jid : Jid}
-type alias Stanza = { dir : String, stanza : String}
+type alias Stanza = { dir : String, time : Float, stanza : String}
 type alias Mappings = Dict.Dict Pid NewTrace
 type alias Model = { tracing : Bool,
                      traced_pids : List Pid,
@@ -163,7 +163,9 @@ handleMessageOk model stanza =
 
 -- SOME USEFUL DECODERS
 
-decodeStanza = Decode.map2 Stanza (Decode.field "dir" Decode.string) (Decode.field "stanza" Decode.string)
+decodeStanza = Decode.map3 Stanza (Decode.field "dir" Decode.string)
+                                  (Decode.field "time" Decode.float)
+                                  (Decode.field "stanza" Decode.string)
 
 decodeField : String -> Decode.Decoder a -> Decode.Value -> DecodeResult a
 decodeField fieldname decoder v =
@@ -289,8 +291,24 @@ viewStanzas stanzas =
 
 showStanza stanza =
     div [class ("stanza " ++ stanza.dir)]
-        (List.map showStanzaPart (String.split "\n" stanza.stanza))
+        (div [class "time"][text (formatTime stanza.time)]
+       :: (List.map showStanzaPart (String.split "\n" stanza.stanza)))
 
 showStanzaPart p =
     div [class "part"][text p]
 
+formatTime tm =
+    tm |> String.fromFloat |> String.split "." |> formatParts
+
+formatParts parts =
+    case parts of
+        [i, f] ->
+            String.concat [
+                           i |> String.slice 0 2 |> String.padLeft 2 ' ',
+                           ".",
+                           f |> String.slice 0 2 |> String.padRight 2 '0'
+                           ]
+        ["0"] ->
+            "0.00"
+        _ ->
+             "bueee"

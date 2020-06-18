@@ -4355,6 +4355,43 @@ function _Browser_load(url)
 		}
 	}));
 }
+
+
+
+var _Bitwise_and = F2(function(a, b)
+{
+	return a & b;
+});
+
+var _Bitwise_or = F2(function(a, b)
+{
+	return a | b;
+});
+
+var _Bitwise_xor = F2(function(a, b)
+{
+	return a ^ b;
+});
+
+function _Bitwise_complement(a)
+{
+	return ~a;
+};
+
+var _Bitwise_shiftLeftBy = F2(function(offset, a)
+{
+	return a << offset;
+});
+
+var _Bitwise_shiftRightBy = F2(function(offset, a)
+{
+	return a >> offset;
+});
+
+var _Bitwise_shiftRightZfBy = F2(function(offset, a)
+{
+	return a >>> offset;
+});
 var $elm$core$Basics$EQ = {$: 'EQ'};
 var $elm$core$Basics$GT = {$: 'GT'};
 var $elm$core$Basics$LT = {$: 'LT'};
@@ -5228,15 +5265,18 @@ var $author$project$Traffic$decodeField = F3(
 				A2($elm$json$Json$Decode$field, fieldname, decoder)),
 			v);
 	});
-var $author$project$Traffic$Stanza = F2(
-	function (dir, stanza) {
-		return {dir: dir, stanza: stanza};
+var $author$project$Traffic$Stanza = F3(
+	function (dir, time, stanza) {
+		return {dir: dir, stanza: stanza, time: time};
 	});
+var $elm$json$Json$Decode$float = _Json_decodeFloat;
+var $elm$json$Json$Decode$map3 = _Json_map3;
 var $elm$json$Json$Decode$string = _Json_decodeString;
-var $author$project$Traffic$decodeStanza = A3(
-	$elm$json$Json$Decode$map2,
+var $author$project$Traffic$decodeStanza = A4(
+	$elm$json$Json$Decode$map3,
 	$author$project$Traffic$Stanza,
 	A2($elm$json$Json$Decode$field, 'dir', $elm$json$Json$Decode$string),
+	A2($elm$json$Json$Decode$field, 'time', $elm$json$Json$Decode$float),
 	A2($elm$json$Json$Decode$field, 'stanza', $elm$json$Json$Decode$string));
 var $elm$core$Debug$log = _Debug_log;
 var $elm$core$Platform$Cmd$batch = _Platform_batch;
@@ -5298,7 +5338,6 @@ var $author$project$Traffic$NewTrace = F3(
 	function (pid, bare_jid, full_jid) {
 		return {bare_jid: bare_jid, full_jid: full_jid, pid: pid};
 	});
-var $elm$json$Json$Decode$map3 = _Json_map3;
 var $author$project$Traffic$newTraceDecoder = A4(
 	$elm$json$Json$Decode$map3,
 	$author$project$Traffic$NewTrace,
@@ -5890,6 +5929,93 @@ var $author$project$Traffic$viewJids = F2(
 						$elm$core$List$reverse(traced_pids)))
 				]));
 	});
+var $elm$core$String$concat = function (strings) {
+	return A2($elm$core$String$join, '', strings);
+};
+var $elm$core$String$cons = _String_cons;
+var $elm$core$String$fromChar = function (_char) {
+	return A2($elm$core$String$cons, _char, '');
+};
+var $elm$core$Bitwise$and = _Bitwise_and;
+var $elm$core$Bitwise$shiftRightBy = _Bitwise_shiftRightBy;
+var $elm$core$String$repeatHelp = F3(
+	function (n, chunk, result) {
+		return (n <= 0) ? result : A3(
+			$elm$core$String$repeatHelp,
+			n >> 1,
+			_Utils_ap(chunk, chunk),
+			(!(n & 1)) ? result : _Utils_ap(result, chunk));
+	});
+var $elm$core$String$repeat = F2(
+	function (n, chunk) {
+		return A3($elm$core$String$repeatHelp, n, chunk, '');
+	});
+var $elm$core$String$padLeft = F3(
+	function (n, _char, string) {
+		return _Utils_ap(
+			A2(
+				$elm$core$String$repeat,
+				n - $elm$core$String$length(string),
+				$elm$core$String$fromChar(_char)),
+			string);
+	});
+var $elm$core$String$padRight = F3(
+	function (n, _char, string) {
+		return _Utils_ap(
+			string,
+			A2(
+				$elm$core$String$repeat,
+				n - $elm$core$String$length(string),
+				$elm$core$String$fromChar(_char)));
+	});
+var $author$project$Traffic$formatParts = function (parts) {
+	_v0$2:
+	while (true) {
+		if (parts.b) {
+			if (parts.b.b) {
+				if (!parts.b.b.b) {
+					var i = parts.a;
+					var _v1 = parts.b;
+					var f = _v1.a;
+					return $elm$core$String$concat(
+						_List_fromArray(
+							[
+								A3(
+								$elm$core$String$padLeft,
+								2,
+								_Utils_chr(' '),
+								A3($elm$core$String$slice, 0, 2, i)),
+								'.',
+								A3(
+								$elm$core$String$padRight,
+								2,
+								_Utils_chr('0'),
+								A3($elm$core$String$slice, 0, 2, f))
+							]));
+				} else {
+					break _v0$2;
+				}
+			} else {
+				if (parts.a === '0') {
+					return '0.00';
+				} else {
+					break _v0$2;
+				}
+			}
+		} else {
+			break _v0$2;
+		}
+	}
+	return 'bueee';
+};
+var $elm$core$String$fromFloat = _String_fromNumber;
+var $author$project$Traffic$formatTime = function (tm) {
+	return $author$project$Traffic$formatParts(
+		A2(
+			$elm$core$String$split,
+			'.',
+			$elm$core$String$fromFloat(tm)));
+};
 var $author$project$Traffic$showStanzaPart = function (p) {
 	return A2(
 		$elm$html$Html$div,
@@ -5910,9 +6036,22 @@ var $author$project$Traffic$showStanza = function (stanza) {
 				$elm$html$Html$Attributes$class('stanza ' + stanza.dir)
 			]),
 		A2(
-			$elm$core$List$map,
-			$author$project$Traffic$showStanzaPart,
-			A2($elm$core$String$split, '\n', stanza.stanza)));
+			$elm$core$List$cons,
+			A2(
+				$elm$html$Html$div,
+				_List_fromArray(
+					[
+						$elm$html$Html$Attributes$class('time')
+					]),
+				_List_fromArray(
+					[
+						$elm$html$Html$text(
+						$author$project$Traffic$formatTime(stanza.time))
+					])),
+			A2(
+				$elm$core$List$map,
+				$author$project$Traffic$showStanzaPart,
+				A2($elm$core$String$split, '\n', stanza.stanza))));
 };
 var $author$project$Traffic$viewStanzas = function (stanzas) {
 	return A2(

@@ -3,7 +3,7 @@ html, body, .all, main, .main {height: 100%;}
 .hidden {display: none}
 
 .all {
-    width: 80%;
+    width: 90%;
     margin: 0 auto;
     font-family: sans-serif;
     margin-top: 20px;
@@ -21,13 +21,13 @@ html, body, .all, main, .main {height: 100%;}
 
 .left {
     float: left;
-    width: 45%;
+    width: 40%;
 }
 
 .right {
     height: 100%;
     float:left;
-    width: 55%;
+    width: 60%;
 }
 
 .enabled {
@@ -67,11 +67,12 @@ button {
 }
 .stanza {
     margin-bottom:10px;
+    margin-left:5px;
     width: 425px;
 }
 
-.in {margin-left:200px; color: darkred}
-.out {margin-left:5px; color: darkgreen}
+.in {color: darkred}
+.out {color: darkgreen}
 
 .connection_state {
     float: right;
@@ -82,3 +83,13 @@ button {
 .problem {
     color: red;
 }
+
+.stanzas .time {
+    float:left;
+    color:black;
+    font-size:smaller;}
+
+.stanzas .in .time {}
+.stanzas .out .time {}
+.stanzas .in .part {margin-left:200px;}
+.stanzas .out .part {margin-left:30px;}

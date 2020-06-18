@@ -21,7 +21,11 @@
 -define(MAX_ITEMS, 500).
 -define(MAX_ACCOUNTS, 100).
 
--record(state, {traces = #{}, tracing = false, current = <<>>, mappings = #{}}).
+-record(state, {traces = #{},
+                tracing = false,
+                current = <<>>,
+                mappings = #{},
+                start_times = #{}}).
 
 %%--------------------------------------------------------------------
 %% Common callbacks for all cowboy behaviours
@@ -72,17 +76,20 @@ websocket_info({message, _Dir, _J, _Stanza}, #state{tracing = false} = State) ->
     {ok, State};
 websocket_info({message, Dir, {Pid, Jid}, Stanza} = Message, State) ->
     Spid = pid_to_binary(Pid),
-    {Traces1, Mappings, IsNew} = record_item(Dir,
+    Now = now_seconds(),
+    {Traces1, Mappings, IsNew} = record_item(Now,
+                                             Dir,
                                              {Spid, Jid},
                                              Stanza,
                                              State#state.traces,
                                              State#state.mappings),
     State1 = State#state{mappings = Mappings},
+    State2 = maybe_store_start_time(Spid, Now, State1),
     case maps:size(Traces1) of
         N when N > ?MAX_ACCOUNTS ->
             reset_and_stop(State1);
         _ ->
-            store_stanza_and_reply(Traces1, IsNew, Message, State1)
+            store_stanza_and_reply(Now, Traces1, IsNew, Message, State2)
     end;
 websocket_info(stop, State) ->
     {stop, State};
@@ -95,11 +102,11 @@ reset_and_stop(State) ->
     M = reply(<<"error">>, #{<<"reason">> => <<"too_many_accounts">>}),
     {reply, M, State1}.
 
-store_stanza_and_reply(Traces1, IsNew, {message, Dir, {Pid, Jid}, Stanza}, State) ->
+store_stanza_and_reply(Now, Traces1, IsNew, {message, Dir, {Pid, Jid}, Stanza}, State) ->
     Spid = pid_to_binary(Pid),
     State1 = State#state{traces = Traces1},
     Announcement = maybe_announce_new(IsNew, Spid, Jid),
-    Msg = maybe_send_current(Dir, Spid, Stanza, State),
+    Msg = maybe_send_current(Now, Dir, Spid, Stanza, State),
     {reply, Announcement ++ Msg, State1}.
 
 maybe_announce_new(true, Spid, Jid) ->
@@ -111,10 +118,12 @@ maybe_announce_new(true, Spid, Jid) ->
 maybe_announce_new(false, _, _) ->
     [].
 
-maybe_send_current(Dir, Spid, Stanza, State) ->
+maybe_send_current(Now, Dir, Spid, Stanza, State) ->
     case is_current(Spid, State) of
         true ->
+            Tm = Now - maps:get(Spid, State#state.start_times),
             M = reply(<<"message">>, #{<<"dir">> => atom_to_binary(Dir, utf8),
+                                       <<"time">> => Tm,
                                        <<"stanza">> => Stanza
                   }),
             [M];
@@ -135,7 +144,8 @@ handle(<<"trace_flag">>, {Payload}, State) ->
 handle(<<"get_trace">>, {Payload}, State) ->
     #{<<"pid">> := Pid} = maps:from_list(Payload),
     {<<"get_trace">>,
-     #{<<"pid">> => Pid, <<"trace">> => format_trace(maps:get(Pid, State#state.traces, []))},
+     #{<<"pid">> => Pid, <<"trace">> => format_trace(maps:get(Pid, State#state.traces, []),
+                                                     maps:get(Pid, State#state.start_times))},
      State#state{current = Pid}};
 handle(<<"clear_all">>, _, State) ->
     {<<"cleared_all">>,
@@ -169,7 +179,7 @@ reply(Event, Payload) ->
 is_current(J, #state{current = J}) -> true;
 is_current(_, _)                   -> false.
 
-record_item(Dir, {Spid, Jid}, Stanza, Traces, Mappings) ->
+record_item(Time, Dir, {Spid, Jid}, Stanza, Traces, Mappings) ->
     Tr = case maps:get(Spid, Traces, undefined) of
              undefined ->
                  queue:new();
@@ -183,15 +193,19 @@ record_item(Dir, {Spid, Jid}, Stanza, Traces, Mappings) ->
                     false ->
                         Mappings
                 end,
-    Tr1 = queue:in({Dir, Stanza}, Tr),
+    Tr1 = queue:in({Time, Dir, Stanza}, Tr),
     Tr2 = case queue:len(Tr1) of
               ?MAX_ITEMS -> queue:out(Tr1);
               _ -> Tr1
           end,
     {maps:put(Spid, Tr2, Traces), Mappings1, IsNew}.
 
-format_trace(Trace) ->
-    lists:map(fun({Dir, Stanza}) -> #{<<"dir">> => atom_to_binary(Dir, utf8), <<"stanza">> => Stanza} end,
+format_trace(Trace, StartTime) ->
+    lists:map(fun({Time, Dir, Stanza}) ->
+                  #{<<"dir">> => atom_to_binary(Dir, utf8),
+                    <<"time">> => Time - StartTime,
+                    <<"stanza">> => Stanza}
+              end,
               lists:reverse(queue:to_list(Trace))).
 
 pid_to_binary(Pid) when is_pid(Pid) ->
@@ -205,10 +219,21 @@ format_jid(#jid{resource = <<>>} = Jid) ->
 format_jid(#jid{} = Jid) ->
     {<<>>, jid:to_binary(jid:to_lower(Jid))}.
 
-is_new_mapping(undefined,    {_, _})       -> true;
+is_new_mapping(undefined,    {_, _})       -> true; % showed up for the very first time
 is_new_mapping({_, _},       {<<>>, <<>>}) -> false; % nothing new
 is_new_mapping({<<>>, <<>>}, {_, _})       -> true; % nothing old, something new
 is_new_mapping({<<>>, _},    {_, _})       -> false; % we already have full jid
 is_new_mapping({_, <<>>},    {<<>>, _})    -> true; % we have bare, received full
 is_new_mapping(_,            {_, _})       -> false.
 
+now_seconds() ->
+    {Msec, Sec, Mili} = os:timestamp(),
+    Msec * 1000000 + Sec + (Mili / 1000000).
+
+maybe_store_start_time(Spid, Time, #state{start_times = StartTimes} = State) ->
+    case maps:get(Spid, StartTimes, undefined) of
+        undefined ->
+            State#state{start_times = maps:put(Spid, Time, StartTimes)};
+        _ ->
+            State
+    end.
