@@ -50,6 +50,9 @@ init _ = ({ tracing = False,
 
 update : Msg -> Model -> UpdateResult
 update msg model =
+    do_update msg {model | announcement = Empty}
+
+do_update msg model =
     case msg of 
         ClearAll -> (model, outPort(simpleEvent "clear_all"))
         SetStatus st ->
@@ -84,7 +87,7 @@ handleEvent ename v model =
         _ -> (model, Cmd.none)
 
 clearAll : Model -> Model
-clearAll model = {model | traced_jids = [], stanzas = [], current_jid = "", announcement = Empty}
+clearAll model = {model | traced_jids = [], stanzas = [], current_jid = ""}
 
 setTraceEvent : Bool -> Cmd Msg
 setTraceEvent st = outPort(outEvent "trace_flag" [("value", Encode.bool st)])
@@ -109,7 +112,7 @@ handleDecodedValue decoder handler (v, model) =
             (model, Cmd.none)
 
 handleStatusOk : Model -> Bool -> UpdateResult
-handleStatusOk model trace_flag = ({model | tracing = trace_flag, announcement = Empty}, Cmd.none)
+handleStatusOk model trace_flag = ({model | tracing = trace_flag}, Cmd.none)
 
 unTrace model = {model | tracing = False}
 
@@ -131,7 +134,7 @@ handleGetTrace v model =
 
 handleGetTraceOk : Model -> List Stanza -> UpdateResult
 handleGetTraceOk model stanzas =
-    ({model | stanzas = stanzas, announcement = Empty}, Cmd.none)
+    ({model | stanzas = stanzas}, Cmd.none)
 
 handleMessage : Decode.Value -> Model -> UpdateResult
 handleMessage v model =
