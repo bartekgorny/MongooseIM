@@ -77,19 +77,20 @@ websocket_info({message, _Dir, _J, _Stanza}, #state{tracing = false} = State) ->
 websocket_info({message, Dir, {Pid, Jid}, Stanza} = Message, State) ->
     Spid = pid_to_binary(Pid),
     Now = now_seconds(),
-    {Traces1, Mappings, IsNew} = record_item(Now,
-                                             Dir,
-                                             {Spid, Jid},
-                                             Stanza,
-                                             State#state.traces,
-                                             State#state.mappings),
-    State1 = State#state{mappings = Mappings},
-    State2 = maybe_store_start_time(Spid, Now, State1),
+    {Traces1, Mappings, IsNewMapping} = record_item(Now,
+                                                    Dir,
+                                                    {Spid, Jid},
+                                                    Stanza,
+                                                    State#state.traces,
+                                                    State#state.mappings),
+    State1 = State#state{traces = Traces1},
+    State2 = State1#state{mappings = Mappings},
+    State3 = maybe_store_start_time(Spid, Now, State2),
     case maps:size(Traces1) of
         N when N > ?MAX_ACCOUNTS ->
-            reset_and_stop(State1);
+            force_stop_tracing(State1);
         _ ->
-            store_stanza_and_reply(Now, Traces1, IsNew, Message, State2)
+            maybe_send_to_user(Now, IsNewMapping, Message, State3)
     end;
 websocket_info(stop, State) ->
     {stop, State};
@@ -97,17 +98,16 @@ websocket_info(Info, State) ->
     ?DEBUG("unknown info: ~p", [Info]),
     {ok, State}.
 
-reset_and_stop(State) ->
+force_stop_tracing(State) ->
     State1 = State#state{tracing = false},
     M = reply(<<"error">>, #{<<"reason">> => <<"too_many_accounts">>}),
     {reply, M, State1}.
 
-store_stanza_and_reply(Now, Traces1, IsNew, {message, Dir, {Pid, Jid}, Stanza}, State) ->
+maybe_send_to_user(Now, IsNewMapping, {message, Dir, {Pid, Jid}, Stanza}, State) ->
     Spid = pid_to_binary(Pid),
-    State1 = State#state{traces = Traces1},
-    Announcement = maybe_announce_new(IsNew, Spid, Jid),
+    Announcement = maybe_announce_new(IsNewMapping, Spid, Jid),
     Msg = maybe_send_current(Now, Dir, Spid, Stanza, State),
-    {reply, Announcement ++ Msg, State1}.
+    {reply, Announcement ++ Msg, State}.
 
 maybe_announce_new(true, Spid, Jid) ->
     {BareJid, FullJid} = format_jid(Jid),
@@ -200,6 +200,8 @@ record_item(Time, Dir, {Spid, Jid}, Stanza, Traces, Mappings) ->
           end,
     {maps:put(Spid, Tr2, Traces), Mappings1, IsNew}.
 
+format_trace([], _StartTime) ->
+    [];
 format_trace(Trace, StartTime) ->
     lists:map(fun({Time, Dir, Stanza}) ->
                   #{<<"dir">> => atom_to_binary(Dir, utf8),
@@ -227,8 +229,8 @@ is_new_mapping({_, <<>>},    {<<>>, _})    -> true; % we have bare, received ful
 is_new_mapping(_,            {_, _})       -> false.
 
 now_seconds() ->
-    {Msec, Sec, Mili} = os:timestamp(),
-    Msec * 1000000 + Sec + (Mili / 1000000).
+    {Msec, Sec, Micro} = os:timestamp(),
+    Msec * 1000000 + Sec + (Micro / 1000000).
 
 maybe_store_start_time(Spid, Time, #state{start_times = StartTimes} = State) ->
     case maps:get(Spid, StartTimes, undefined) of

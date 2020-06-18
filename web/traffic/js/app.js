@@ -44,7 +44,7 @@ function  connectionState(socket){
 
 function initialise() {
     // TODO pass the port somehow from the server
-    socket = new WebSocket("ws://localhost:5111/ws-traffic")
+    socket = open_websocket()
     console.log(socket)
     socket.onopen = function(e) {
       console.log("[open] Connection established");
