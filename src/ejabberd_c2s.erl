@@ -264,12 +264,14 @@ get_subscribed(FsmRef) ->
 -spec wait_for_stream(Item :: ejabberd:xml_stream_item(),
                       StateData :: state()) -> fsm_return().
 wait_for_stream({xmlstreamstart, _Name, _} = StreamStart, StateData) ->
+    mongoose_hooks:c2s_debug(StateData#state.server, no_acc, {out, StateData#state.jid, StreamStart}),
     handle_stream_start(StreamStart, StateData);
 wait_for_stream(timeout, StateData) ->
     {stop, normal, StateData};
 wait_for_stream(closed, StateData) ->
     {stop, normal, StateData};
-wait_for_stream(_UnexpectedItem, #state{ server = Server } = StateData) ->
+wait_for_stream(UnexpectedItem, #state{ server = Server } = StateData) ->
+    mongoose_hooks:c2s_debug(StateData#state.server, no_acc, {out, StateData#state.jid, UnexpectedItem}),
     case ejabberd_config:get_local_option(hide_service_name, Server) of
         true ->
             {stop, normal, StateData};
@@ -493,8 +495,10 @@ maybe_add_cert(Creds, S) ->
                                State :: state()) -> fsm_return().
 wait_for_feature_before_auth({xmlstreamelement,
                           #xmlel{name = <<"enable">>} = El}, StateData) ->
+    mongoose_hooks:c2s_debug(StateData#state.server, no_acc, {out, StateData#state.jid, El}),
     maybe_unexpected_sm_request(wait_for_feature_before_auth, El, StateData);
 wait_for_feature_before_auth({xmlstreamelement, El}, StateData) ->
+    mongoose_hooks:c2s_debug(StateData#state.server, no_acc, {out, StateData#state.jid, El}),
     #xmlel{name = Name, attrs = Attrs, children = Els} = El,
     {Zlib, _} = StateData#state.zlib,
     TLS = StateData#state.tls,
@@ -543,14 +547,17 @@ wait_for_feature_before_auth({xmlstreamelement, El}, StateData) ->
     end;
 wait_for_feature_before_auth(timeout, StateData) ->
     {stop, normal, StateData};
-wait_for_feature_before_auth({xmlstreamend, _Name}, StateData) ->
+wait_for_feature_before_auth({xmlstreamend, _Name} = El, StateData) ->
+    mongoose_hooks:c2s_debug(StateData#state.server, no_acc, {out, StateData#state.jid, El}),
     send_trailer(StateData),
     {stop, normal, StateData};
-wait_for_feature_before_auth({xmlstreamerror, _}, StateData) ->
+wait_for_feature_before_auth({xmlstreamerror, _} = El, StateData) ->
+    mongoose_hooks:c2s_debug(StateData#state.server, no_acc, {out, StateData#state.jid, El}),
     c2s_stream_error(mongoose_xmpp_errors:xml_not_well_formed(), StateData);
 wait_for_feature_before_auth(closed, StateData) ->
     {stop, normal, StateData};
-wait_for_feature_before_auth(_, StateData) ->
+wait_for_feature_before_auth(El, StateData) ->
+    mongoose_hooks:c2s_debug(StateData#state.server, no_acc, {out, StateData#state.jid, El}),
     c2s_stream_error(mongoose_xmpp_errors:policy_violation(), StateData).
 
 compressed() ->
@@ -575,8 +582,10 @@ compress_setup_failed() ->
                              State :: state()) -> fsm_return().
 wait_for_sasl_response({xmlstreamelement,
                         #xmlel{name = <<"enable">>} = El}, StateData) ->
+    mongoose_hooks:c2s_debug(StateData#state.server, no_acc, {out, StateData#state.jid, El}),
     maybe_unexpected_sm_request(wait_for_sasl_response, El, StateData);
 wait_for_sasl_response({xmlstreamelement, El}, StateData) ->
+    mongoose_hooks:c2s_debug(StateData#state.server, no_acc, {out, StateData#state.jid, El}),
     #xmlel{name = Name, attrs = Attrs, children = Els} = El,
     case {xml:get_attr_s(<<"xmlns">>, Attrs), Name} of
         {?NS_SASL, <<"response">>} ->
@@ -590,10 +599,12 @@ wait_for_sasl_response({xmlstreamelement, El}, StateData) ->
     end;
 wait_for_sasl_response(timeout, StateData) ->
     {stop, normal, StateData};
-wait_for_sasl_response({xmlstreamend, _Name}, StateData) ->
+wait_for_sasl_response({xmlstreamend, _Name} = El, StateData) ->
+    mongoose_hooks:c2s_debug(StateData#state.server, no_acc, {out, StateData#state.jid, El}),
     send_trailer(StateData),
     {stop, normal, StateData};
-wait_for_sasl_response({xmlstreamerror, _}, StateData) ->
+wait_for_sasl_response({xmlstreamerror, _} = El, StateData) ->
+    mongoose_hooks:c2s_debug(StateData#state.server, no_acc, {out, StateData#state.jid, El}),
     c2s_stream_error(mongoose_xmpp_errors:xml_not_well_formed(), StateData);
 wait_for_sasl_response(closed, StateData) ->
     {stop, normal, StateData}.
@@ -602,9 +613,11 @@ wait_for_sasl_response(closed, StateData) ->
                               State :: state()) -> fsm_return().
 wait_for_feature_after_auth({xmlstreamelement,
                          #xmlel{name = <<"enable">>} = El}, StateData) ->
+    mongoose_hooks:c2s_debug(StateData#state.server, no_acc, {out, StateData#state.jid, El}),
     maybe_unexpected_sm_request(wait_for_feature_after_auth, El, StateData);
 wait_for_feature_after_auth({xmlstreamelement,
                          #xmlel{name = <<"resume">>} = El}, StateData) ->
+    mongoose_hooks:c2s_debug(StateData#state.server, no_acc, {out, StateData#state.jid, El}),
     maybe_resume_session(wait_for_feature_after_auth, El, StateData);
 wait_for_feature_after_auth({xmlstreamelement, El}, StateData) ->
     mongoose_hooks:c2s_debug(StateData#state.server, no_acc, {out, StateData#state.jid, El}),
@@ -641,17 +654,20 @@ wait_for_feature_after_auth({xmlstreamelement, El}, StateData) ->
 wait_for_feature_after_auth(timeout, StateData) ->
     {stop, normal, StateData};
 
-wait_for_feature_after_auth({xmlstreamend, _Name}, StateData) ->
+wait_for_feature_after_auth({xmlstreamend, _Name} = El, StateData) ->
+    mongoose_hooks:c2s_debug(StateData#state.server, no_acc, {out, StateData#state.jid, El}),
     send_trailer(StateData),
     {stop, normal, StateData};
 
-wait_for_feature_after_auth({xmlstreamerror, _}, StateData) ->
+wait_for_feature_after_auth({xmlstreamerror, _} = El, StateData) ->
+    mongoose_hooks:c2s_debug(StateData#state.server, no_acc, {out, StateData#state.jid, El}),
     c2s_stream_error(mongoose_xmpp_errors:xml_not_well_formed(), StateData);
 
 wait_for_feature_after_auth(closed, StateData) ->
     {stop, normal, StateData};
 
-wait_for_feature_after_auth(_, StateData) ->
+wait_for_feature_after_auth(El, StateData) ->
+    mongoose_hooks:c2s_debug(StateData#state.server, no_acc, {out, StateData#state.jid, El}),
     c2s_stream_error(mongoose_xmpp_errors:policy_violation(), StateData).
 
 -spec wait_for_session_or_sm(Item :: ejabberd:xml_stream_item(),
@@ -689,17 +705,20 @@ wait_for_session_or_sm({xmlstreamelement, El}, StateData0) ->
 wait_for_session_or_sm(timeout, StateData) ->
     {stop, normal, StateData};
 
-wait_for_session_or_sm({xmlstreamend, _Name}, StateData) ->
+wait_for_session_or_sm({xmlstreamend, _Name} = El, StateData) ->
+    mongoose_hooks:c2s_debug(StateData#state.server, no_acc, {out, StateData#state.jid, El}),
     send_trailer(StateData),
     {stop, normal, StateData};
 
-wait_for_session_or_sm({xmlstreamerror, _}, StateData) ->
+wait_for_session_or_sm({xmlstreamerror, _} = El, StateData) ->
+    mongoose_hooks:c2s_debug(StateData#state.server, no_acc, {out, StateData#state.jid, El}),
     c2s_stream_error(mongoose_xmpp_errors:xml_not_well_formed(), StateData);
 
 wait_for_session_or_sm(closed, StateData) ->
     {stop, normal, StateData};
 
-wait_for_session_or_sm(_, StateData) ->
+wait_for_session_or_sm(El, StateData) ->
+    mongoose_hooks:c2s_debug(StateData#state.server, no_acc, {out, StateData#state.jid, El}),
     c2s_stream_error(mongoose_xmpp_errors:policy_violation(), StateData).
 
 maybe_do_compress(El = #xmlel{name = Name, attrs = Attrs}, NextState, StateData) ->
@@ -1660,6 +1679,7 @@ send_header(StateData, Server, Version, Lang)
                {<<"xmlns:stream">>, <<"http://etherx.jabber.org/streams">>},
                {<<"id">>, StateData#state.streamid},
                {<<"from">>, Server}]},
+    mongoose_hooks:c2s_debug(Server, no_acc, {in, Header}),
     (StateData#state.sockmod):send_xml(StateData#state.socket, Header);
 send_header(StateData, Server, Version, Lang) ->
     VersionStr = case Version of
@@ -1677,6 +1697,7 @@ send_header(StateData, Server, Version, Lang) ->
                "from='", (Server)/binary, "'",
                (VersionStr)/binary,
                (LangStr)/binary, ">">>,
+    mongoose_hooks:c2s_debug(Server, no_acc, {in, Header}),
     send_text(StateData, Header).
 
 -spec maybe_send_trailer_safe(State :: state()) -> any().
@@ -1687,9 +1708,11 @@ maybe_send_trailer_safe(StateData) ->
     catch send_trailer(StateData).
 
 send_trailer(StateData) when StateData#state.xml_socket ->
+    mongoose_hooks:c2s_debug(StateData#state.server, no_acc, {in, ?STREAM_TRAILER}),
     (StateData#state.sockmod):send_xml(StateData#state.socket,
                                        {xmlstreamend, <<"stream:stream">>});
 send_trailer(StateData) ->
+    mongoose_hooks:c2s_debug(StateData#state.server, no_acc, {in, ?STREAM_TRAILER}),
     send_text(StateData, ?STREAM_TRAILER).
 
 

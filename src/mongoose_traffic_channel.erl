@@ -21,7 +21,7 @@
 -define(MAX_ITEMS, 500).
 -define(MAX_ACCOUNTS, 100).
 
--record(state, {traces = #{}, tracing = false, current = <<>>}).
+-record(state, {traces = #{}, tracing = false, current = <<>>, mappings = #{}}).
 
 %%--------------------------------------------------------------------
 %% Common callbacks for all cowboy behaviours
@@ -70,13 +70,19 @@ websocket_handle(Any, State) ->
 % Other messages from the system are handled here.
 websocket_info({message, _Dir, _J, _Stanza}, #state{tracing = false} = State) ->
     {ok, State};
-websocket_info({message, Dir, J, Stanza} = Message, State) ->
-    {Traces1, IsNew} = record_item(Dir, J, Stanza, State#state.traces),
+websocket_info({message, Dir, {Pid, Jid}, Stanza} = Message, State) ->
+    Spid = pid_to_binary(Pid),
+    {Traces1, Mappings, IsNew} = record_item(Dir,
+                                             {Spid, Jid},
+                                             Stanza,
+                                             State#state.traces,
+                                             State#state.mappings),
+    State1 = State#state{mappings = Mappings},
     case maps:size(Traces1) of
         N when N > ?MAX_ACCOUNTS ->
-            reset_and_stop(State);
+            reset_and_stop(State1);
         _ ->
-            store_stanza_and_reply(Traces1, IsNew, Message, State)
+            store_stanza_and_reply(Traces1, IsNew, Message, State1)
     end;
 websocket_info(stop, State) ->
     {stop, State};
@@ -85,26 +91,31 @@ websocket_info(Info, State) ->
     {ok, State}.
 
 reset_and_stop(State) ->
-    State1 = State#state{tracing = false, traces = #{}},
+    State1 = State#state{tracing = false},
     M = reply(<<"error">>, #{<<"reason">> => <<"too_many_accounts">>}),
     {reply, M, State1}.
 
-store_stanza_and_reply(Traces1, IsNew, {message, Dir, J, Stanza}, State) ->
+store_stanza_and_reply(Traces1, IsNew, {message, Dir, {Pid, Jid}, Stanza}, State) ->
+    Spid = pid_to_binary(Pid),
     State1 = State#state{traces = Traces1},
-    Announcement = maybe_announce_new(IsNew, J),
-    Msg = maybe_send_current(Dir, J, Stanza, State),
+    Announcement = maybe_announce_new(IsNew, Spid, Jid),
+    Msg = maybe_send_current(Dir, Spid, Stanza, State),
     {reply, Announcement ++ Msg, State1}.
 
-maybe_announce_new(true, J) ->
-    [reply(<<"new_trace">>, #{<<"jid">> => J})];
-maybe_announce_new(false, _) ->
+maybe_announce_new(true, Spid, Jid) ->
+    {BareJid, FullJid} = format_jid(Jid),
+    [reply(<<"new_trace">>,
+           #{<<"pid">> => Spid,
+             <<"bare_jid">> => BareJid,
+             <<"full_jid">> => FullJid})];
+maybe_announce_new(false, _, _) ->
     [].
 
-maybe_send_current(Dir, J, Stanza, State) ->
-    case is_current(J, State) of
+maybe_send_current(Dir, Spid, Stanza, State) ->
+    case is_current(Spid, State) of
         true ->
             M = reply(<<"message">>, #{<<"dir">> => atom_to_binary(Dir, utf8),
-                                             <<"stanza">> => Stanza
+                                       <<"stanza">> => Stanza
                   }),
             [M];
         false ->
@@ -122,17 +133,13 @@ handle(<<"trace_flag">>, {Payload}, State) ->
      #{<<"value">> := Flag} = maps:from_list(Payload),
      return_status(State#state{tracing = Flag});
 handle(<<"get_trace">>, {Payload}, State) ->
-    #{<<"jid">> := Jid} = maps:from_list(Payload),
+    #{<<"pid">> := Pid} = maps:from_list(Payload),
     {<<"get_trace">>,
-     #{<<"jid">> => Jid, <<"trace">> => format_trace(maps:get(Jid, State#state.traces, []))},
-     State#state{current = Jid}};
+     #{<<"pid">> => Pid, <<"trace">> => format_trace(maps:get(Pid, State#state.traces, []))},
+     State#state{current = Pid}};
 handle(<<"clear_all">>, _, State) ->
     {<<"cleared_all">>,
      State#state{traces = #{}, current = <<>>}};
-handle(<<"clear">>, #{<<"jid">> := Jid}, State) ->
-    {<<"cleared">>,
-     #{<<"jid">> => Jid},
-     State#state{traces = clear_trace(to_binary(Jid), State#state.traces)}};
 handle(<<"heartbeat">>, _, State) ->
     {<<"heartbeat_ok">>,
      <<>>,
@@ -159,28 +166,49 @@ reply(Event, Payload) ->
 %%% Internal functions
 %%%===================================================================
 
-to_binary(#jid{} = Jid) -> jid:to_binary(Jid);
-to_binary(Jid) -> Jid.
-
-clear_trace(J, Traces) -> maps:put(J, queue:new(), Traces).
-
 is_current(J, #state{current = J}) -> true;
 is_current(_, _)                   -> false.
 
-record_item(Dir, J, Stanza, Traces) ->
-    {Tr, IsNew} = case maps:get(J, Traces, undefined) of
+record_item(Dir, {Spid, Jid}, Stanza, Traces, Mappings) ->
+    Tr = case maps:get(Spid, Traces, undefined) of
              undefined ->
-                 {queue:new(), true};
-             Q -> {Q, false}
+                 queue:new();
+             Q -> Q
          end,
+    Fjid = format_jid(Jid),
+    IsNew = is_new_mapping(maps:get(Spid, Mappings, undefined), Fjid),
+    Mappings1 = case IsNew of
+                    true ->
+                        maps:put(Spid, Fjid, Mappings);
+                    false ->
+                        Mappings
+                end,
     Tr1 = queue:in({Dir, Stanza}, Tr),
     Tr2 = case queue:len(Tr1) of
               ?MAX_ITEMS -> queue:out(Tr1);
               _ -> Tr1
           end,
-    {maps:put(J, Tr2, Traces), IsNew}.
+    {maps:put(Spid, Tr2, Traces), Mappings1, IsNew}.
 
 format_trace(Trace) ->
     lists:map(fun({Dir, Stanza}) -> #{<<"dir">> => atom_to_binary(Dir, utf8), <<"stanza">> => Stanza} end,
               lists:reverse(queue:to_list(Trace))).
+
+pid_to_binary(Pid) when is_pid(Pid) ->
+    [Spid] = io_lib:format("~p", [Pid]),
+    list_to_binary(Spid).
+
+format_jid(undefined) ->
+    {<<>>, <<>>};
+format_jid(#jid{resource = <<>>} = Jid) ->
+    {jid:to_binary(jid:to_lower(Jid)), <<>>};
+format_jid(#jid{} = Jid) ->
+    {<<>>, jid:to_binary(jid:to_lower(Jid))}.
+
+is_new_mapping(undefined,    {_, _})       -> true;
+is_new_mapping({_, _},       {<<>>, <<>>}) -> false; % nothing new
+is_new_mapping({<<>>, <<>>}, {_, _})       -> true; % nothing old, something new
+is_new_mapping({<<>>, _},    {_, _})       -> false; % we already have full jid
+is_new_mapping({_, <<>>},    {<<>>, _})    -> true; % we have bare, received full
+is_new_mapping(_,            {_, _})       -> false.
 

@@ -128,7 +128,7 @@ test_sending_short(Config) ->
     escalus:fresh_story(
         Config, [{alice, 1}, {bob, 1}, {carol, 1}],
         fun(Alice, Bob, Carol) ->
-            lists:map(fun(_) -> justsend(Alice, Bob, Carol) end, lists:seq(1, 10)),
+            lists:map(fun(_) -> justsend(Alice, Bob, Carol) end, lists:seq(1, 5)),
             ok
         end).
 

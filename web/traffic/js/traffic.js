@@ -5146,6 +5146,8 @@ var $elm$core$Task$perform = F2(
 var $elm$browser$Browser$element = _Browser_element;
 var $author$project$Traffic$Empty = {$: 'Empty'};
 var $author$project$Traffic$Open = {$: 'Open'};
+var $elm$core$Dict$RBEmpty_elm_builtin = {$: 'RBEmpty_elm_builtin'};
+var $elm$core$Dict$empty = $elm$core$Dict$RBEmpty_elm_builtin;
 var $elm$json$Json$Encode$list = F2(
 	function (func, entries) {
 		return _Json_wrap(
@@ -5191,15 +5193,7 @@ var $author$project$Traffic$simpleEvent = function (evt) {
 };
 var $author$project$Traffic$init = function (_v0) {
 	return _Utils_Tuple2(
-		{
-			announcement: $author$project$Traffic$Empty,
-			conn_state: $author$project$Traffic$Open,
-			current_jid: '',
-			stanzas: _List_Nil,
-			traced_jids: _List_fromArray(
-				['asdfasdfasdfadafasdfasdfasdfdfasdfasdfsadfdsakdfkkfdfksadsasdfasdflkskds']),
-			tracing: false
-		},
+		{announcement: $author$project$Traffic$Empty, conn_state: $author$project$Traffic$Open, current_pid: '', mappings: $elm$core$Dict$empty, stanzas: _List_Nil, traced_pids: _List_Nil, tracing: false},
 		$author$project$Traffic$outPort(
 			$author$project$Traffic$simpleEvent('get_status')));
 };
@@ -5222,7 +5216,7 @@ var $author$project$Traffic$Lost = {$: 'Lost'};
 var $author$project$Traffic$clearAll = function (model) {
 	return _Utils_update(
 		model,
-		{announcement: $author$project$Traffic$Empty, current_jid: '', stanzas: _List_Nil, traced_jids: _List_Nil});
+		{current_pid: '', stanzas: _List_Nil, traced_pids: _List_Nil});
 };
 var $author$project$Traffic$decodeField = F3(
 	function (fieldname, decoder, v) {
@@ -5266,7 +5260,7 @@ var $author$project$Traffic$handleGetTraceOk = F2(
 		return _Utils_Tuple2(
 			_Utils_update(
 				model,
-				{announcement: $author$project$Traffic$Empty, stanzas: stanzas}),
+				{stanzas: stanzas}),
 			$elm$core$Platform$Cmd$none);
 	});
 var $elm$json$Json$Decode$list = _Json_decodeList;
@@ -5300,21 +5294,197 @@ var $author$project$Traffic$handleMessage = F2(
 			$author$project$Traffic$handleMessageOk,
 			_Utils_Tuple2(v, model));
 	});
-var $author$project$Traffic$handleNewTraceOk = F2(
-	function (model, jid) {
-		return _Utils_Tuple2(
-			_Utils_update(
+var $author$project$Traffic$NewTrace = F3(
+	function (pid, bare_jid, full_jid) {
+		return {bare_jid: bare_jid, full_jid: full_jid, pid: pid};
+	});
+var $elm$json$Json$Decode$map3 = _Json_map3;
+var $author$project$Traffic$newTraceDecoder = A4(
+	$elm$json$Json$Decode$map3,
+	$author$project$Traffic$NewTrace,
+	A2($elm$json$Json$Decode$field, 'pid', $elm$json$Json$Decode$string),
+	A2($elm$json$Json$Decode$field, 'bare_jid', $elm$json$Json$Decode$string),
+	A2($elm$json$Json$Decode$field, 'full_jid', $elm$json$Json$Decode$string));
+var $author$project$Traffic$decodeNewTrace = function (v) {
+	return A2(
+		$elm$json$Json$Decode$decodeValue,
+		A2($elm$json$Json$Decode$field, 'payload', $author$project$Traffic$newTraceDecoder),
+		v);
+};
+var $elm$core$Dict$Black = {$: 'Black'};
+var $elm$core$Dict$RBNode_elm_builtin = F5(
+	function (a, b, c, d, e) {
+		return {$: 'RBNode_elm_builtin', a: a, b: b, c: c, d: d, e: e};
+	});
+var $elm$core$Dict$Red = {$: 'Red'};
+var $elm$core$Dict$balance = F5(
+	function (color, key, value, left, right) {
+		if ((right.$ === 'RBNode_elm_builtin') && (right.a.$ === 'Red')) {
+			var _v1 = right.a;
+			var rK = right.b;
+			var rV = right.c;
+			var rLeft = right.d;
+			var rRight = right.e;
+			if ((left.$ === 'RBNode_elm_builtin') && (left.a.$ === 'Red')) {
+				var _v3 = left.a;
+				var lK = left.b;
+				var lV = left.c;
+				var lLeft = left.d;
+				var lRight = left.e;
+				return A5(
+					$elm$core$Dict$RBNode_elm_builtin,
+					$elm$core$Dict$Red,
+					key,
+					value,
+					A5($elm$core$Dict$RBNode_elm_builtin, $elm$core$Dict$Black, lK, lV, lLeft, lRight),
+					A5($elm$core$Dict$RBNode_elm_builtin, $elm$core$Dict$Black, rK, rV, rLeft, rRight));
+			} else {
+				return A5(
+					$elm$core$Dict$RBNode_elm_builtin,
+					color,
+					rK,
+					rV,
+					A5($elm$core$Dict$RBNode_elm_builtin, $elm$core$Dict$Red, key, value, left, rLeft),
+					rRight);
+			}
+		} else {
+			if ((((left.$ === 'RBNode_elm_builtin') && (left.a.$ === 'Red')) && (left.d.$ === 'RBNode_elm_builtin')) && (left.d.a.$ === 'Red')) {
+				var _v5 = left.a;
+				var lK = left.b;
+				var lV = left.c;
+				var _v6 = left.d;
+				var _v7 = _v6.a;
+				var llK = _v6.b;
+				var llV = _v6.c;
+				var llLeft = _v6.d;
+				var llRight = _v6.e;
+				var lRight = left.e;
+				return A5(
+					$elm$core$Dict$RBNode_elm_builtin,
+					$elm$core$Dict$Red,
+					lK,
+					lV,
+					A5($elm$core$Dict$RBNode_elm_builtin, $elm$core$Dict$Black, llK, llV, llLeft, llRight),
+					A5($elm$core$Dict$RBNode_elm_builtin, $elm$core$Dict$Black, key, value, lRight, right));
+			} else {
+				return A5($elm$core$Dict$RBNode_elm_builtin, color, key, value, left, right);
+			}
+		}
+	});
+var $elm$core$Basics$compare = _Utils_compare;
+var $elm$core$Dict$insertHelp = F3(
+	function (key, value, dict) {
+		if (dict.$ === 'RBEmpty_elm_builtin') {
+			return A5($elm$core$Dict$RBNode_elm_builtin, $elm$core$Dict$Red, key, value, $elm$core$Dict$RBEmpty_elm_builtin, $elm$core$Dict$RBEmpty_elm_builtin);
+		} else {
+			var nColor = dict.a;
+			var nKey = dict.b;
+			var nValue = dict.c;
+			var nLeft = dict.d;
+			var nRight = dict.e;
+			var _v1 = A2($elm$core$Basics$compare, key, nKey);
+			switch (_v1.$) {
+				case 'LT':
+					return A5(
+						$elm$core$Dict$balance,
+						nColor,
+						nKey,
+						nValue,
+						A3($elm$core$Dict$insertHelp, key, value, nLeft),
+						nRight);
+				case 'EQ':
+					return A5($elm$core$Dict$RBNode_elm_builtin, nColor, nKey, value, nLeft, nRight);
+				default:
+					return A5(
+						$elm$core$Dict$balance,
+						nColor,
+						nKey,
+						nValue,
+						nLeft,
+						A3($elm$core$Dict$insertHelp, key, value, nRight));
+			}
+		}
+	});
+var $elm$core$Dict$insert = F3(
+	function (key, value, dict) {
+		var _v0 = A3($elm$core$Dict$insertHelp, key, value, dict);
+		if ((_v0.$ === 'RBNode_elm_builtin') && (_v0.a.$ === 'Red')) {
+			var _v1 = _v0.a;
+			var k = _v0.b;
+			var v = _v0.c;
+			var l = _v0.d;
+			var r = _v0.e;
+			return A5($elm$core$Dict$RBNode_elm_builtin, $elm$core$Dict$Black, k, v, l, r);
+		} else {
+			var x = _v0;
+			return x;
+		}
+	});
+var $author$project$Traffic$updateMapping = F2(
+	function (newtrace, model) {
+		return _Utils_update(
+			model,
+			{
+				mappings: A3($elm$core$Dict$insert, newtrace.pid, newtrace, model.mappings)
+			});
+	});
+var $elm$core$List$any = F2(
+	function (isOkay, list) {
+		any:
+		while (true) {
+			if (!list.b) {
+				return false;
+			} else {
+				var x = list.a;
+				var xs = list.b;
+				if (isOkay(x)) {
+					return true;
+				} else {
+					var $temp$isOkay = isOkay,
+						$temp$list = xs;
+					isOkay = $temp$isOkay;
+					list = $temp$list;
+					continue any;
+				}
+			}
+		}
+	});
+var $elm$core$List$member = F2(
+	function (x, xs) {
+		return A2(
+			$elm$core$List$any,
+			function (a) {
+				return _Utils_eq(a, x);
+			},
+			xs);
+	});
+var $author$project$Traffic$updateTraces = F2(
+	function (newtrace, model) {
+		var _v0 = A2($elm$core$List$member, newtrace.pid, model.traced_pids);
+		if (_v0) {
+			return model;
+		} else {
+			return _Utils_update(
 				model,
 				{
-					traced_jids: A2($elm$core$List$cons, jid, model.traced_jids)
-				}),
+					traced_pids: A2($elm$core$List$cons, newtrace.pid, model.traced_pids)
+				});
+		}
+	});
+var $author$project$Traffic$handleNewTraceOk = F2(
+	function (model, newtrace) {
+		return _Utils_Tuple2(
+			A2(
+				$author$project$Traffic$updateTraces,
+				newtrace,
+				A2($author$project$Traffic$updateMapping, newtrace, model)),
 			$elm$core$Platform$Cmd$none);
 	});
 var $author$project$Traffic$handleNewTrace = F2(
 	function (v, model) {
 		return A3(
 			$author$project$Traffic$handleDecodedValue,
-			A2($author$project$Traffic$decodeField, 'jid', $elm$json$Json$Decode$string),
+			$author$project$Traffic$decodeNewTrace,
 			$author$project$Traffic$handleNewTraceOk,
 			_Utils_Tuple2(v, model));
 	});
@@ -5324,7 +5494,7 @@ var $author$project$Traffic$handleStatusOk = F2(
 		return _Utils_Tuple2(
 			_Utils_update(
 				model,
-				{announcement: $author$project$Traffic$Empty, tracing: trace_flag}),
+				{tracing: trace_flag}),
 			$elm$core$Platform$Cmd$none);
 	});
 var $author$project$Traffic$handleStatus = F2(
@@ -5415,7 +5585,7 @@ var $author$project$Traffic$handleEvent = F3(
 				return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
 		}
 	});
-var $author$project$Traffic$update = F2(
+var $author$project$Traffic$do_update = F2(
 	function (msg, model) {
 		switch (msg.$) {
 			case 'ClearAll':
@@ -5428,12 +5598,12 @@ var $author$project$Traffic$update = F2(
 				return _Utils_Tuple2(
 					model,
 					$author$project$Traffic$setTraceEvent(st));
-			case 'SelectJid':
-				var jid = msg.a;
+			case 'SelectPid':
+				var pid = msg.a;
 				return _Utils_Tuple2(
 					_Utils_update(
 						model,
-						{current_jid: jid}),
+						{current_pid: pid}),
 					$author$project$Traffic$outPort(
 						A2(
 							$author$project$Traffic$outEvent,
@@ -5441,8 +5611,8 @@ var $author$project$Traffic$update = F2(
 							_List_fromArray(
 								[
 									_Utils_Tuple2(
-									'jid',
-									$elm$json$Json$Encode$string(jid))
+									'pid',
+									$elm$json$Json$Encode$string(pid))
 								]))));
 			default:
 				var v = msg.a;
@@ -5461,6 +5631,15 @@ var $author$project$Traffic$update = F2(
 				}
 		}
 	});
+var $author$project$Traffic$update = F2(
+	function (msg, model) {
+		return A2(
+			$author$project$Traffic$do_update,
+			msg,
+			_Utils_update(
+				model,
+				{announcement: $author$project$Traffic$Empty}));
+	});
 var $author$project$Traffic$ClearAll = {$: 'ClearAll'};
 var $elm$html$Html$button = _VirtualDom_node('button');
 var $elm$html$Html$Attributes$stringProperty = F2(
@@ -5471,6 +5650,58 @@ var $elm$html$Html$Attributes$stringProperty = F2(
 			$elm$json$Json$Encode$string(string));
 	});
 var $elm$html$Html$Attributes$class = $elm$html$Html$Attributes$stringProperty('className');
+var $elm$core$Dict$get = F2(
+	function (targetKey, dict) {
+		get:
+		while (true) {
+			if (dict.$ === 'RBEmpty_elm_builtin') {
+				return $elm$core$Maybe$Nothing;
+			} else {
+				var key = dict.b;
+				var value = dict.c;
+				var left = dict.d;
+				var right = dict.e;
+				var _v1 = A2($elm$core$Basics$compare, targetKey, key);
+				switch (_v1.$) {
+					case 'LT':
+						var $temp$targetKey = targetKey,
+							$temp$dict = left;
+						targetKey = $temp$targetKey;
+						dict = $temp$dict;
+						continue get;
+					case 'EQ':
+						return $elm$core$Maybe$Just(value);
+					default:
+						var $temp$targetKey = targetKey,
+							$temp$dict = right;
+						targetKey = $temp$targetKey;
+						dict = $temp$dict;
+						continue get;
+				}
+			}
+		}
+	});
+var $author$project$Traffic$displayJid = F2(
+	function (pid, mappings) {
+		var _v0 = A2($elm$core$Dict$get, pid, mappings);
+		if (_v0.$ === 'Just') {
+			var info = _v0.a;
+			var _v1 = _Utils_Tuple2(info.bare_jid, info.full_jid);
+			if (_v1.a === '') {
+				var f = _v1.b;
+				return f;
+			} else {
+				if (_v1.b === '') {
+					var b = _v1.a;
+					return b;
+				} else {
+					return pid;
+				}
+			}
+		} else {
+			return pid;
+		}
+	});
 var $elm$html$Html$div = _VirtualDom_node('div');
 var $elm$virtual_dom$VirtualDom$Normal = function (a) {
 	return {$: 'Normal', a: a};
@@ -5582,7 +5813,7 @@ var $author$project$Traffic$viewAnnouncement = function (ann) {
 					]),
 				_List_fromArray(
 					[
-						$elm$html$Html$text('Too many jids traced, tracing disabled')
+						$elm$html$Html$text('Too many pids traced, tracing disabled')
 					]));
 		} else {
 			var reason = ann.a;
@@ -5599,63 +5830,66 @@ var $author$project$Traffic$viewAnnouncement = function (ann) {
 		}
 	}
 };
-var $author$project$Traffic$SelectJid = function (a) {
-	return {$: 'SelectJid', a: a};
+var $author$project$Traffic$SelectPid = function (a) {
+	return {$: 'SelectPid', a: a};
 };
 var $elm$html$Html$a = _VirtualDom_node('a');
-var $author$project$Traffic$showJid = function (jid) {
-	return A2(
-		$elm$html$Html$div,
-		_List_fromArray(
-			[
-				$elm$html$Html$Attributes$class('jid')
-			]),
-		_List_fromArray(
-			[
-				A2(
-				$elm$html$Html$a,
-				_List_fromArray(
-					[
-						$elm$html$Html$Events$onClick(
-						$author$project$Traffic$SelectJid(jid))
-					]),
-				_List_fromArray(
-					[
-						$elm$html$Html$text(jid)
-					]))
-			]));
-};
-var $author$project$Traffic$viewJids = function (traced_jids) {
-	return A2(
-		$elm$html$Html$div,
-		_List_fromArray(
-			[
-				$elm$html$Html$Attributes$class('tracing')
-			]),
-		_List_fromArray(
-			[
-				A2(
-				$elm$html$Html$div,
-				_List_fromArray(
-					[
-						$elm$html$Html$Attributes$class('label')
-					]),
-				_List_fromArray(
-					[
-						$elm$html$Html$text('Active accounts:')
-					])),
-				A2(
-				$elm$html$Html$div,
-				_List_fromArray(
-					[
-						$elm$html$Html$Attributes$class('jids')
-					]),
-				A2(
-					$elm$core$List$map,
-					$author$project$Traffic$showJid,
-					$elm$core$List$reverse(traced_jids)))
-			]));
-};
+var $author$project$Traffic$showJid = F2(
+	function (mappings, pid) {
+		return A2(
+			$elm$html$Html$div,
+			_List_fromArray(
+				[
+					$elm$html$Html$Attributes$class('jid')
+				]),
+			_List_fromArray(
+				[
+					A2(
+					$elm$html$Html$a,
+					_List_fromArray(
+						[
+							$elm$html$Html$Events$onClick(
+							$author$project$Traffic$SelectPid(pid))
+						]),
+					_List_fromArray(
+						[
+							$elm$html$Html$text(
+							A2($author$project$Traffic$displayJid, pid, mappings))
+						]))
+				]));
+	});
+var $author$project$Traffic$viewJids = F2(
+	function (traced_pids, mappings) {
+		return A2(
+			$elm$html$Html$div,
+			_List_fromArray(
+				[
+					$elm$html$Html$Attributes$class('tracing')
+				]),
+			_List_fromArray(
+				[
+					A2(
+					$elm$html$Html$div,
+					_List_fromArray(
+						[
+							$elm$html$Html$Attributes$class('label')
+						]),
+					_List_fromArray(
+						[
+							$elm$html$Html$text('Active accounts:')
+						])),
+					A2(
+					$elm$html$Html$div,
+					_List_fromArray(
+						[
+							$elm$html$Html$Attributes$class('jids')
+						]),
+					A2(
+						$elm$core$List$map,
+						$author$project$Traffic$showJid(mappings),
+						$elm$core$List$reverse(traced_pids)))
+				]));
+	});
 var $author$project$Traffic$showStanzaPart = function (p) {
 	return A2(
 		$elm$html$Html$div,
@@ -5768,7 +6002,7 @@ var $author$project$Traffic$view = function (model) {
 							]),
 						_List_fromArray(
 							[
-								$author$project$Traffic$viewJids(model.traced_jids)
+								A2($author$project$Traffic$viewJids, model.traced_pids, model.mappings)
 							])),
 						A2(
 						$elm$html$Html$div,
@@ -5786,7 +6020,8 @@ var $author$project$Traffic$view = function (model) {
 									]),
 								_List_fromArray(
 									[
-										$elm$html$Html$text(model.current_jid)
+										$elm$html$Html$text(
+										A2($author$project$Traffic$displayJid, model.current_pid, model.mappings))
 									])),
 								$author$project$Traffic$viewAnnouncement(model.announcement),
 								$author$project$Traffic$viewStanzas(model.stanzas)

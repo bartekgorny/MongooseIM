@@ -17,11 +17,15 @@ type ConnectionState = Open
                        | Lost
 
 type alias Jid = String
+type alias Pid = String
+type alias NewTrace = {pid : Pid, bare_jid : Jid, full_jid : Jid}
 type alias Stanza = { dir : String, stanza : String}
+type alias Mappings = Dict.Dict Pid NewTrace
 type alias Model = { tracing : Bool,
-                     traced_jids : List Jid,
-                     current_jid : Jid,
+                     traced_pids : List Pid,
+                     current_pid : Pid,
                      stanzas : List Stanza,
+                     mappings : Mappings,
                      announcement : Announcement,
                      conn_state : ConnectionState}
 
@@ -33,7 +37,7 @@ type Announcement = Empty
 
 type Msg = SetStatus Bool
            | ClearAll
-           | SelectJid Jid
+           | SelectPid Pid
            | RecEvent Encode.Value
 
 
@@ -41,9 +45,10 @@ type Msg = SetStatus Bool
 
 init : () -> (Model, Cmd Msg)
 init _ = ({ tracing = False,
-            traced_jids = [],
-            current_jid = "",
+            traced_pids = [],
+            current_pid = "",
             stanzas = [],
+            mappings = Dict.empty,
             announcement = Empty,
             conn_state = Open},
           outPort(simpleEvent "get_status")) -- server default may change
@@ -57,7 +62,7 @@ do_update msg model =
         ClearAll -> (model, outPort(simpleEvent "clear_all"))
         SetStatus st ->
                 (model, setTraceEvent st)
-        SelectJid jid -> ({model | current_jid = jid}, outPort(outEvent "get_trace" [("jid", Encode.string jid)]))
+        SelectPid pid -> ({model | current_pid = pid}, outPort(outEvent "get_trace" [("pid", Encode.string pid)]))
         RecEvent v ->
             case Decode.decodeValue (Decode.field "event" Decode.string) v of
                 Ok eventName ->
@@ -87,7 +92,7 @@ handleEvent ename v model =
         _ -> (model, Cmd.none)
 
 clearAll : Model -> Model
-clearAll model = {model | traced_jids = [], stanzas = [], current_jid = ""}
+clearAll model = {model | traced_pids = [], stanzas = [], current_pid = ""}
 
 setTraceEvent : Bool -> Cmd Msg
 setTraceEvent st = outPort(outEvent "trace_flag" [("value", Encode.bool st)])
@@ -119,12 +124,21 @@ unTrace model = {model | tracing = False}
 handleNewTrace : Decode.Value -> Model -> UpdateResult
 handleNewTrace v model =
     (v, model)
-    |> handleDecodedValue (decodeField "jid" Decode.string )
+    |> handleDecodedValue decodeNewTrace
                           handleNewTraceOk
 
-handleNewTraceOk : Model -> Jid -> UpdateResult
-handleNewTraceOk model jid =
-    ({model | traced_jids = jid :: model.traced_jids}, Cmd.none)
+handleNewTraceOk : Model -> NewTrace -> UpdateResult
+handleNewTraceOk model newtrace =
+    (model |> updateMapping newtrace |> updateTraces newtrace,
+     Cmd.none)
+
+updateMapping newtrace model =
+    {model | mappings = Dict.insert newtrace.pid newtrace model.mappings}
+
+updateTraces newtrace model =
+    case List.member newtrace.pid model.traced_pids of
+        True -> model
+        False -> {model | traced_pids = newtrace.pid :: model.traced_pids}
 
 handleGetTrace : Decode.Value -> Model -> UpdateResult
 handleGetTrace v model =
@@ -161,6 +175,11 @@ showErrorMessage v model =
         Ok reason -> {model | announcement = Error reason}
         _ -> model
 
+decodeNewTrace v = Decode.decodeValue  (Decode.field "payload" newTraceDecoder) v
+
+newTraceDecoder = Decode.map3 NewTrace (Decode.field "pid" Decode.string )
+                                       (Decode.field "bare_jid" Decode.string)
+                                       (Decode.field "full_jid" Decode.string)
 -- COMMUNICATION TOOLS
 
 subscriptions : Model -> Sub Msg
@@ -194,10 +213,10 @@ view model =
         ],
         div [class "main"][
             div [class "left"][
-                viewJids model.traced_jids
+                viewJids model.traced_pids model.mappings
             ],
             div [class "right"][
-                div [class "current"][text model.current_jid],
+                div [class "current"][text (displayJid model.current_pid model.mappings)],
                 viewAnnouncement model.announcement,
                 viewStanzas model.stanzas
             ]
@@ -207,7 +226,7 @@ view model =
 viewAnnouncement ann =
     case ann of
         Empty -> div [class "hidden"][]
-        Error "too_many_accounts" -> div [class "problem"] [text "Too many jids traced, tracing disabled"]
+        Error "too_many_accounts" -> div [class "problem"] [text "Too many pids traced, tracing disabled"]
         Error reason -> div [class "problem"] [text reason]
 
 showConnState model =
@@ -226,14 +245,28 @@ connStateLabel state =
         Open -> "connection open"
         Lost -> "trying to reconnect..."
 
-viewJids traced_jids =
+viewJids : List String -> Mappings -> Html Msg
+viewJids traced_pids mappings =
     div [class "tracing"] [
         div [class "label"] [text "Active accounts:"],
-        div [class "jids"] (List.map showJid (List.reverse traced_jids))
+        div [class "jids"] (List.map (showJid mappings) (List.reverse traced_pids))
     ]
 
-showJid jid =
-    div [class "jid"] [a [onClick (SelectJid jid)] [text jid]]
+showJid : Mappings -> Pid -> Html Msg
+showJid mappings pid =
+    div [class "jid"] [a [onClick (SelectPid pid)] [text (displayJid pid mappings)]]
+
+displayJid : Pid -> Mappings -> Pid
+displayJid pid mappings =
+    case Dict.get pid mappings of
+        Just info ->
+            case (info.bare_jid, info.full_jid) of
+                ("", f) -> f
+                (b, "") -> b
+                _ -> pid
+        Nothing ->
+            pid
+
 
 enableClass is_enabled =
     case is_enabled of

@@ -52,24 +52,19 @@ trace_traffic(Acc, {out, From, El}) ->
     traffic(out, From, El),
     Acc;
 trace_traffic(Acc, {in, El}) ->
-    To = case exml_query:attr(El, <<"to">>) of
-             undefined -> mongoose_acc:to_jid(Acc);
+    To = case get_jid(stanza, El) of
+             undefined -> get_jid(acc, Acc);
              J -> jid:from_binary(J)
          end,
     traffic(in, To, El),
     Acc.
-%%trace_traffic(Acc, {in, {_From, To, El}}) ->
-%%    traffic(in, To, El),
-%%    Acc.
 
-traffic(_Dir, undefined, _El) ->
-    ok;
-traffic(Dir, Account, El) ->
-    Sacc = jid:to_binary(jid:to_lower(Account)),
-    St = exml:to_pretty_iolist(El),
+traffic(Dir, Jid, El) ->
+    St = fix_and_format(El),
+    UserPid = self(),
     case whereis(?MODULE) of
         undefined -> ok;
-        Pid -> gen_server:cast(Pid, {message, Dir, Sacc, St})
+        Pid -> gen_server:cast(Pid, {message, Dir, {UserPid, Jid}, St})
     end,
     ok.
 
@@ -106,3 +101,25 @@ init(Req, State) ->
                             #{},
                             {sendfile, 0, Size, Path}, Req),
     {ok, Req1, State}.
+
+fix_and_format(El) when is_binary(El) ->
+    El;
+fix_and_format({Tag, Name, Attrs}) ->
+    exml:to_pretty_iolist({Tag, Name, fix_attrs(Attrs)});
+fix_and_format({Tag, Name, Attrs, Children}) ->
+    exml:to_pretty_iolist({Tag, Name, fix_attrs(Attrs), Children}).
+
+fix_attrs(Attrs) ->
+    lists:filter(fun is_defined/1, Attrs).
+
+is_defined({_, undefined}) -> false;
+is_defined({_, _}) -> true.
+
+get_jid(stanza, #xmlel{} = El) ->
+    exml_query:attr(El, <<"to">>);
+get_jid(stanza, _) ->
+    undefined;
+get_jid(acc, no_acc) ->
+    undefined;
+get_jid(acc, Acc) ->
+    mongoose_acc:to_jid(Acc).
